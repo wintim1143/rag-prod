@@ -30,6 +30,7 @@ const MAX_PASSAGE_LENGTH = 512;
 export class LocalReranker implements Reranker {
   private readonly modelId: string;
   private state: 'idle' | 'ready' | 'failed' = 'idle';
+  private lastError?: string;
   private tokenizerPromise?: ReturnType<typeof AutoTokenizer.from_pretrained>;
   private modelPromise?: ReturnType<typeof AutoModelForSequenceClassification.from_pretrained>;
 
@@ -59,10 +60,12 @@ export class LocalReranker implements Reranker {
         return { candidates, status: 'cross-encoder' };
       } catch (err) {
         this.state = 'failed';
-        return this.fallback(query, candidates, errorMessage(err));
+        this.lastError = errorMessage(err);
+        return this.fallback(query, candidates, this.lastError);
       }
     }
-    return this.fallback(query, candidates);
+    // 已失败：持续降级，并保留首次失败原因供 /search 展示
+    return this.fallback(query, candidates, this.lastError);
   }
 
   private async ensureLoaded() {

@@ -64,7 +64,7 @@ export class LanceDBStore {
       await table.delete(`docId = '${docId}'`);
     }
     if (records.length === 0) {
-      await this.ensureFtsIndex();
+      await this.rebuildFtsIndex();
       return 0;
     }
     if (table) {
@@ -73,7 +73,7 @@ export class LanceDBStore {
       await db.createTable(this.tableName, records);
     }
     // 数据变更后重建 FTS 索引，保证全文检索与最新数据一致
-    await this.ensureFtsIndex();
+    await this.rebuildFtsIndex();
     return records.length;
   }
 
@@ -122,8 +122,21 @@ export class LanceDBStore {
     };
   }
 
-  /** 确保 FTS 索引存在（replace: true，覆盖重建，幂等）。 */
+  /** 懒建：仅当 FTS 索引不存在时创建（检索前调用，避免每次重建）。 */
   async ensureFtsIndex(): Promise<void> {
+    const table = await this.openOrNull();
+    if (!table) return;
+    const indices = await table.listIndices();
+    if (indices.some((i) => i.indexType === 'FTS')) return;
+    await table.createIndex(FTS_COLUMN, {
+      config: lancedb.Index.fts(),
+      replace: false,
+      waitTimeoutSeconds: 60,
+    });
+  }
+
+  /** 强制重建 FTS 索引（摄入数据变更后调用，保证全文检索与最新数据一致）。 */
+  async rebuildFtsIndex(): Promise<void> {
     const table = await this.openOrNull();
     if (!table) return;
     await table.createIndex(FTS_COLUMN, {
