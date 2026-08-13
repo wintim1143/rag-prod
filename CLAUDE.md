@@ -1,6 +1,6 @@
 # CLAUDE.md — rag-prod 会话上下文
 
-> 面向在新项目目录里开工的 agent 的交接文档。新会话先读这份 + `docs/tickets/`，从 frontier（01）开始。
+> 面向在新项目目录里开工的 agent 的交接文档。新会话先读这份 + `docs/tickets/` + `docs/PROGRESS.md`，从 frontier（03）开始。
 
 ## 项目使命
 

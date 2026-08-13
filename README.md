@@ -92,8 +92,9 @@ rag-prod/
 
 ## 文档索引
 
+- [项目进度](docs/PROGRESS.md) — 已完成工作 / 可人工验证 / LLM 依赖矩阵
 - [摄入流程说明](docs/ingestion-flow.md) — 解析支持哪些格式、是否需要 LLM
-- [开发切片](docs/tickets/) — 9 条 tickets，01 号可从当前开始
+- [开发切片](docs/tickets/) — 9 条 tickets，按依赖序推进
 
 ## 相关
 
