@@ -17,6 +17,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@lancedb/lancedb": "^0.37.1",
     "@langchain/core": "^1.2.6",
     "@langchain/openai": "^1.5.7",

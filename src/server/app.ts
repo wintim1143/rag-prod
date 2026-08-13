@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from '../config/index.js';
-import { OpenAIEmbedder } from '../ingestion/embedder.js';
+import { LocalEmbedder, OpenAIEmbedder, type Embedder } from '../ingestion/embedder.js';
 import { IngestPipeline, type IngestService } from '../ingestion/pipeline.js';
 import { buildIngestRoutes } from '../ingestion/routes/ingest.js';
 import { LanceDBStore } from '../ingestion/store/lancedb.js';
@@ -25,12 +25,21 @@ export function buildApp({
   const app = Fastify({ logger });
   app.register(buildHealthRoutes, { config });
   app.register(buildIngestRoutes, {
-    ingest:
-      services.ingest ??
-      new IngestPipeline(config, {
-        embedder: new OpenAIEmbedder(config),
-        store: new LanceDBStore(config.lance.dbPath),
-      }),
+    ingest: services.ingest ?? new IngestPipeline(config, createIngestDeps(config)),
   });
   return app;
+}
+
+/** 按 EMBEDDING_MODE 选择 embedder：默认本地 Transformers.js，cloud 走云 API。 */
+function createEmbedder(config: Config): Embedder {
+  return config.embedding.mode === 'cloud'
+    ? new OpenAIEmbedder(config)
+    : new LocalEmbedder();
+}
+
+function createIngestDeps(config: Config) {
+  return {
+    embedder: createEmbedder(config),
+    store: new LanceDBStore(config.lance.dbPath),
+  };
 }

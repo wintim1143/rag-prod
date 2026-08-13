@@ -11,7 +11,8 @@
 | 编排框架 | LangChain.js（加载器 / 切分器 / retriever / LLM 抽象） |
 | 服务端 | Fastify（TypeScript，Node ≥ 20） |
 | 向量库 | LanceDB（嵌入式，文件落盘，进程重启不丢） |
-| LLM / Embedding | OpenAI 兼容云 API（环境变量可配 baseURL，支持 DeepSeek 等） |
+| LLM | 云 OpenAI 兼容 API（环境变量可配 baseURL，支持 DeepSeek 等） |
+| Embedding | 默认本地 Transformers.js（all-MiniLM-L6-v2），可切云 |
 | 重排器 | 本地 cross-encoder（bge-reranker 家族，Transformers.js），启发式兜底 |
 | 测试 | vitest（TS 原生，覆盖率门槛 ≥80%） |
 
@@ -46,9 +47,11 @@ npm run typecheck             # tsc --noEmit
 | `LLM_BASE_URL` | chat 模型 API base | `https://api.deepseek.com/v1` |
 | `LLM_API_KEY` | chat 模型密钥 | `sk-...` |
 | `LLM_MODEL` | chat 模型 | `deepseek-chat` |
-| `EMBEDDING_BASE_URL` | embedding API base（可与 LLM 相同） | 同上 |
-| `EMBEDDING_API_KEY` | embedding 密钥 | `sk-...` |
-| `EMBEDDING_MODEL` | embedding 模型 | `text-embedding-3-small` |
+| `EMBEDDING_MODE` | 向量化方式：`local`（默认，Transformers.js）/ `cloud` | `local` |
+| `HF_ENDPOINT` | 本地 embedding 模型下载源（可选；镜像如 `https://hf-mirror.com`） | `https://huggingface.co` |
+| `EMBEDDING_BASE_URL` | cloud 模式 embedding base（可与 LLM 相同） | 同上 |
+| `EMBEDDING_API_KEY` | cloud 模式 embedding 密钥 | `sk-...` |
+| `EMBEDDING_MODEL` | cloud 模式 embedding 模型 | `text-embedding-3-small` |
 | `LANCE_DB_PATH` | LanceDB 目录 | `./data/lance` |
 | `INGEST_ROOT` | 限制 `/ingest` 可读的根目录（可选，默认不限制） | `./data` |
 | `RERANKER_MODEL` | 本地 cross-encoder 模型 id（HF） | `BAAI/bge-reranker-base` |

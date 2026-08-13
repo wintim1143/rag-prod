@@ -10,7 +10,8 @@
 
 - **LangChain.js + TypeScript**（Node ≥ 20）做编排
 - **LanceDB 嵌入式**向量库（文件落盘、重启不丢、无独立服务进程）
-- **云 OpenAI 兼容 API** 做 chat 与 embedding（baseURL 可配，兼容 DeepSeek 等）
+- **chat 用云 OpenAI 兼容 API**（baseURL 可配，兼容 DeepSeek 等）
+- **Embedding 默认本地**：Transformers.js + all-MiniLM-L6-v2（384 维，无需云 key）；可切云 `EMBEDDING_MODE=cloud`
 - **本地 cross-encoder**（bge-reranker 家族，Transformers.js）做重排，启发式兜底
 - **Fastify** 做 HTTP API；**Agentic + 流式**纳入本期（09）
 

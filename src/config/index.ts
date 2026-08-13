@@ -79,10 +79,14 @@ const envSchema = z.object({
   LLM_API_KEY: requiredString('LLM_API_KEY'),
   LLM_MODEL: requiredString('LLM_MODEL'),
 
-  // Embedding：可缺省，resolveConfig 回落到 LLM_*
+  // Embedding：可缺省，resolveConfig 回落到 LLM_*（cloud 模式）
   EMBEDDING_BASE_URL: optionalUrl(),
   EMBEDDING_API_KEY: optionalString(),
   EMBEDDING_MODEL: optionalString(),
+  // local = 本地 Transformers.js（默认，不依赖云）；cloud = 云 OpenAI 兼容 API
+  EMBEDDING_MODE: z
+    .preprocess(emptyToUndefined, z.enum(['local', 'cloud'], { required_error: 'EMBEDDING_MODE 必填' }))
+    .default('local'),
 
   // ---- 向量库 ----
   LANCE_DB_PATH: requiredStringWithDefault('LANCE_DB_PATH', './data/lance'),
@@ -140,6 +144,8 @@ export interface Config {
     baseUrl: string;
     apiKey: string;
     model: string;
+    /** 向量化方式：本地 Transformers.js（默认）或云 OpenAI 兼容 API。 */
+    mode: 'local' | 'cloud';
     /** 是否显式配置了独立 embedding provider（供诊断/日志区分）。 */
     usesDedicatedProvider: boolean;
   };
@@ -187,6 +193,7 @@ export function resolveConfig(raw: RawConfig): Config {
       baseUrl: raw.EMBEDDING_BASE_URL ?? raw.LLM_BASE_URL,
       apiKey: raw.EMBEDDING_API_KEY ?? raw.LLM_API_KEY,
       model: raw.EMBEDDING_MODEL ?? raw.LLM_MODEL,
+      mode: raw.EMBEDDING_MODE,
       usesDedicatedProvider,
     },
     lance: {

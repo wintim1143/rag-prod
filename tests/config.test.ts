@@ -26,14 +26,23 @@ describe('loadConfig — 有效配置', () => {
     expect(config.server.env).toBe('test');
   });
 
-  it('Embedding 缺省回落到 LLM（默认同 provider）', () => {
+  it('Embedding 缺省回落到 LLM（默认本地模式，同 provider）', () => {
     const config = loadConfig({ env: validEnv() });
     expect(config.embedding).toEqual({
       baseUrl: 'https://api.deepseek.com/v1',
       apiKey: 'sk-test-key',
       model: 'deepseek-chat',
+      mode: 'local',
       usesDedicatedProvider: false,
     });
+  });
+
+  it('EMBEDDING_MODE 默认 local，可切 cloud', () => {
+    const local = loadConfig({ env: validEnv() });
+    expect(local.embedding.mode).toBe('local');
+
+    const cloud = loadConfig({ env: { ...validEnv(), EMBEDDING_MODE: 'cloud' } });
+    expect(cloud.embedding.mode).toBe('cloud');
   });
 
   it('显式设置 EMBEDDING_* 时启用独立 provider', () => {
