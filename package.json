@@ -17,15 +17,22 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@lancedb/lancedb": "^0.37.1",
     "@langchain/core": "^1.2.6",
     "@langchain/openai": "^1.5.7",
+    "@langchain/textsplitters": "^1.0.1",
+    "cheerio": "^1.2.0",
     "dotenv": "^17.0.0",
     "fastify": "^5.0.0",
+    "mammoth": "^1.12.1",
+    "unpdf": "^1.8.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^3.0.0",
+    "docx": "^9.7.1",
+    "pdf-lib": "^1.17.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^3.0.0"

@@ -32,8 +32,8 @@
 | # | 切片 | Blocked by | 状态 |
 |---|---|---|---|
 | 01 | 项目脚手架 + 配置中心（TS + Fastify + env 校验 + /health） | — | done ✅ (2026-08-13) |
-| 02 | 摄入管线（加载→切分→Embedding→LanceDB + /ingest） | 01 | **frontier，可开工** |
-| 03 | 混合检索 + 本地 cross-encoder 重排（/search 各环节分数） | 02 | pending |
+| 02 | 摄入管线（加载→切分→Embedding→LanceDB + /ingest） | 01 | done ✅ (2026-08-13) |
+| 03 | 混合检索 + 本地 cross-encoder 重排（/search 各环节分数） | 02 | **frontier，可开工** |
 | 04 | 问答/聊天端点（真实生成 + 引用，/ask 与 /chat） | 03 | pending |
 | 05 | 知识库管理 API（列表/删除/重索引/租户过滤） | 02 | pending |
 | 06 | 评估体系（评测集 30+ + LLM 判分 + 回归对比） | 04 | pending |

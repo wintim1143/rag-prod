@@ -70,6 +70,26 @@ const envSchema = z.object({
   // ---- 重排器（03 实现时到 HF 核验模型 id）----
   RERANKER_MODEL: requiredStringWithDefault('RERANKER_MODEL', 'BAAI/bge-reranker-base'),
 
+  // ---- 摄入切分（02 生效）----
+  CHUNK_SIZE: z
+    .preprocess(
+      emptyToUndefined,
+      z.coerce
+        .number({ required_error: 'CHUNK_SIZE 必填' })
+        .int({ message: 'CHUNK_SIZE 必须是整数' })
+        .positive({ message: 'CHUNK_SIZE 必须大于 0' }),
+    )
+    .default(800),
+  CHUNK_OVERLAP: z
+    .preprocess(
+      emptyToUndefined,
+      z.coerce
+        .number({ required_error: 'CHUNK_OVERLAP 必填' })
+        .int({ message: 'CHUNK_OVERLAP 必须是整数' })
+        .min(0, { message: 'CHUNK_OVERLAP 不能为负' }),
+    )
+    .default(100),
+
   // ---- HTTP 服务 ----
   PORT: z
     .preprocess(
@@ -100,6 +120,13 @@ const envSchema = z.object({
       message: 'EMBEDDING_* 必须三项同时设置或全部留空，避免专用密钥/模型名错配 LLM 的 baseUrl',
     });
   }
+  if (raw.CHUNK_OVERLAP >= raw.CHUNK_SIZE) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['CHUNK_OVERLAP'],
+      message: 'CHUNK_OVERLAP 必须小于 CHUNK_SIZE',
+    });
+  }
 });
 
 type RawConfig = z.infer<typeof envSchema>;
@@ -123,6 +150,10 @@ export interface Config {
   };
   reranker: {
     model: string;
+  };
+  chunking: {
+    chunkSize: number;
+    chunkOverlap: number;
   };
   server: {
     port: number;
@@ -161,6 +192,10 @@ export function resolveConfig(raw: RawConfig): Config {
     },
     reranker: {
       model: raw.RERANKER_MODEL,
+    },
+    chunking: {
+      chunkSize: raw.CHUNK_SIZE,
+      chunkOverlap: raw.CHUNK_OVERLAP,
     },
     server: {
       port: raw.PORT,

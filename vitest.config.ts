@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',
-    reporter: 'verbose',
+    reporters: ['verbose'],
     coverage: {
       provider: 'v8',
       include: ['src/**'],

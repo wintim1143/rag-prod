@@ -23,6 +23,14 @@ npm install
 npm run dev                   # 起服务，/health 可用
 ```
 
+摄入一个文件或目录（需要有效的 Embedding API key）：
+
+```bash
+curl -X POST http://localhost:3000/ingest \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"./data/sample"}'
+```
+
 ## 测试与类型检查
 
 ```bash
@@ -75,7 +83,7 @@ rag-prod/
 ## 主要 API（目标）
 
 - `GET /health` — 健康检查
-- `POST /ingest` — 摄入文档/目录（返回 docId + 块数）
+- `POST /ingest` — 摄入单文件或目录（**02 已实现**）；body `{ "path": "..." }`，返回 `{ ingested: [{docId, sourcePath, chunkCount}], failed: [...] }`
 - `POST /search` — 混合检索 + 重排（各环节分数可见）
 - `POST /ask` / `POST /chat` — 问答（带引用）；`/chat` 支持历史与流式/agentic
 - 文档管理：`GET /documents`、`DELETE /documents/:id`、重索引

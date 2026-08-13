@@ -4,10 +4,10 @@
 
 **Blocked by:** 01 — 项目脚手架 + 配置中心
 
-**Status:** ready-for-agent
+**Status:** done ✅ (2026-08-13)
 
-- [ ] 分别摄入 PDF/DOCX/MD/HTML/TXT 各一篇 → 生成带来源元数据（标题、源路径、章节路径）的块
-- [ ] 切分保留标题/章节上下文；chunk 大小与 overlap 可配置
-- [ ] 块持久化到 LanceDB；新进程重启后仍能检索到
-- [ ] `/ingest` 返回 docId + 块数；重复摄入同一 docId 是更新而非重复插入
-- [ ] 每个加载器与切分器都有单元测试
+- [x] 分别摄入 PDF/DOCX/MD/HTML/TXT 各一篇 → 生成带来源元数据（标题、源路径、章节路径）的块
+- [x] 切分保留标题/章节上下文；chunk 大小与 overlap 可配置
+- [x] 块持久化到 LanceDB；新进程重启后仍能检索到
+- [x] `/ingest` 返回 docId + 块数；重复摄入同一 docId 是更新而非重复插入
+- [x] 每个加载器与切分器都有单元测试
