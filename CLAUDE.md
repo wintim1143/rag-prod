@@ -31,7 +31,8 @@
 
 | # | 切片 | Blocked by | 状态 |
 |---|---|---|---|
-| 01 | 项目脚手架 + 配置中心（TS + Fastify + env 校验 + /health） | — | **frontier，可开工** |
+| 01 | 项目脚手架 + 配置中心（TS + Fastify + env 校验 + /health） | — | done ✅ (2026-08-13) |
+| 02 | 摄入管线（加载→切分→Embedding→LanceDB + /ingest） | 01 | **frontier，可开工** |
 | 02 | 摄入管线（加载→切分→Embedding→LanceDB + /ingest） | 01 | pending |
 | 03 | 混合检索 + 本地 cross-encoder 重排（/search 各环节分数） | 02 | pending |
 | 04 | 问答/聊天端点（真实生成 + 引用，/ask 与 /chat） | 03 | pending |
@@ -47,7 +48,7 @@
 
 - **09 号 agentic 层**：用 Vercel AI SDK，还是 LangChain 自身的 agent / langgraph（Node 版）？04 完成后再定，不影响依赖结构。
 - **bge-reranker 的 ONNX 模型 id**：实现 03 时到 HF 实际核验（`BAAI/bge-reranker-base` 等，中文/多语可用版本以当时为准）。
-- **测试运行器**：vitest 或 node:test + tsx。选一个并写进 README。
+- **测试运行器**：已定 vitest（2026-08-13），见 README「测试与类型检查」。
 - **LLM 与 Embedding 是否同一 provider**：可由 env 配置（`EMBEDDING_BASE_URL` 缺省回落到 `LLM_BASE_URL`）。
 
 ## 约定
@@ -57,7 +58,7 @@
 - commit 遵循 Conventional Commits；提交前 `npm test` 全绿
 - 先读对应 ticket 的 acceptance 再动手；验收标准未满足不算完成
 
-## 常用命令（目标，01 落地后生效）
+## 常用命令（01 已落地，随切片扩展）
 
 ```bash
 npm run dev      # 起服务
