@@ -1,0 +1,25 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+
+# 运行时数据（LanceDB 落盘、上传文件）
+data/
+
+# 环境变量（含密钥，绝不提交）
+.env
+.env.local
+
+# 日志
+*.log
+npm-debug.log*
+
+# 覆盖率与临时
+coverage/
+.vitest/
+.DS_Store
+*.tsbuildinfo
+
+# OMC 插件运行时状态
+.omc/
