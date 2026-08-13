@@ -64,6 +64,14 @@ describe('loadConfig — 有效配置', () => {
     const { PORT: _port, ...noPort } = validEnv();
     expect(loadConfig({ env: noPort }).server.port).toBe(3000);
   });
+
+  it('解析 INGEST_ROOT（可选）；缺省为 undefined', () => {
+    const withRoot = loadConfig({ env: { ...validEnv(), INGEST_ROOT: './data/uploads' } });
+    expect(withRoot.ingest.root).toBe('./data/uploads');
+
+    const without = loadConfig({ env: validEnv() });
+    expect(without.ingest.root).toBeUndefined();
+  });
 });
 
 describe('loadConfig — 校验失败', () => {

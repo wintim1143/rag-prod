@@ -26,6 +26,14 @@ function makePipeline(dbPath: string): IngestPipeline {
   });
 }
 
+function makePipelineWithRoot(dbPath: string, root: string): IngestPipeline {
+  const config = loadConfig({ env: { ...validEnv(), INGEST_ROOT: root } });
+  return new IngestPipeline(config, {
+    embedder: new FakeEmbedder(),
+    store: new LanceDBStore(dbPath),
+  });
+}
+
 /** 每次重新 connect 查表行数，模拟「新进程读旧库」。 */
 async function countChunks(dbPath: string): Promise<number> {
   const db = await lancedb.connect(dbPath);
@@ -33,6 +41,15 @@ async function countChunks(dbPath: string): Promise<number> {
   if (!names.includes('chunks')) return 0;
   const table = await db.openTable('chunks');
   return table.countRows();
+}
+
+/** 统计特定 docId 的行数（避免与其他测试写入的表数据混算）。 */
+async function countChunksForDocId(dbPath: string, docId: string): Promise<number> {
+  const db = await lancedb.connect(dbPath);
+  const names = await db.tableNames();
+  if (!names.includes('chunks')) return 0;
+  const table = await db.openTable('chunks');
+  return table.countRows(`docId = '${docId}'`);
 }
 
 afterAll(async () => {
@@ -113,5 +130,42 @@ describe('摄入管线 — 失败与边界', () => {
     await fs.writeFile(empty, '');
     const outcome = await makePipeline(tmpDir).ingestPath(empty);
     expect(outcome.ingested[0]?.chunkCount).toBe(0);
+  });
+});
+
+describe('摄入管线 — 更新语义（空文档）', () => {
+  it('已摄入文档被清空后重摄入，旧块被删除（更新为无块）', async () => {
+    const file = path.join(tmpDir, 'shrink.md');
+    await fs.writeFile(file, '# 有内容\n\n' + '内容。'.repeat(50));
+    const pipeline = makePipeline(tmpDir);
+
+    const first = await pipeline.ingestPath(file);
+    const docId = first.ingested[0]?.docId as string;
+    expect(await countChunksForDocId(tmpDir, docId)).toBeGreaterThan(0);
+
+    await fs.writeFile(file, '');
+    const second = await pipeline.ingestPath(file);
+    expect(second.ingested[0]?.chunkCount).toBe(0);
+    expect(await countChunksForDocId(tmpDir, docId)).toBe(0);
+  });
+});
+
+describe('摄入管线 — INGEST_ROOT 路径安全', () => {
+  it('根目录内路径正常摄入，目录外路径记为 failed', async () => {
+    const root = path.join(tmpDir, 'allowed');
+    await fs.mkdir(root, { recursive: true });
+    const inside = path.join(root, 'ok.md');
+    const outside = path.join(tmpDir, 'outside.md');
+    await fs.writeFile(inside, 'ok');
+    await fs.writeFile(outside, 'bad');
+    const pipeline = makePipelineWithRoot(root, root);
+
+    const ok = await pipeline.ingestPath(inside);
+    expect(ok.ingested).toHaveLength(1);
+
+    const bad = await pipeline.ingestPath(outside);
+    expect(bad.ingested).toHaveLength(0);
+    expect(bad.failed).toHaveLength(1);
+    expect(bad.failed[0]?.error).toContain('摄入根目录');
   });
 });

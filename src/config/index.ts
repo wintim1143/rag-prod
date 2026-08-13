@@ -46,6 +46,26 @@ function optionalUrl() {
   );
 }
 
+/** 整数环境变量（空串视为未设置）。 */
+function intEnv(
+  label: string,
+  bounds: { min?: number; max?: number; positive?: boolean } = {},
+) {
+  let schema = z.coerce
+    .number({ required_error: `${label} 必填` })
+    .int({ message: `${label} 必须是整数` });
+  if (bounds.positive) {
+    schema = schema.positive({ message: `${label} 必须大于 0` });
+  }
+  if (bounds.min !== undefined) {
+    schema = schema.min(bounds.min, { message: `${label} 必须 ≥ ${bounds.min}` });
+  }
+  if (bounds.max !== undefined) {
+    schema = schema.max(bounds.max, { message: `${label} 必须 ≤ ${bounds.max}` });
+  }
+  return z.preprocess(emptyToUndefined, schema);
+}
+
 /**
  * 原始环境变量的校验 schema。键名与 README「环境变量」表一一对应。
  * 后续切片（02 分块、03 检索参数、08 查询优化）需要新增变量时，在此追加。
@@ -71,36 +91,14 @@ const envSchema = z.object({
   RERANKER_MODEL: requiredStringWithDefault('RERANKER_MODEL', 'BAAI/bge-reranker-base'),
 
   // ---- 摄入切分（02 生效）----
-  CHUNK_SIZE: z
-    .preprocess(
-      emptyToUndefined,
-      z.coerce
-        .number({ required_error: 'CHUNK_SIZE 必填' })
-        .int({ message: 'CHUNK_SIZE 必须是整数' })
-        .positive({ message: 'CHUNK_SIZE 必须大于 0' }),
-    )
-    .default(800),
-  CHUNK_OVERLAP: z
-    .preprocess(
-      emptyToUndefined,
-      z.coerce
-        .number({ required_error: 'CHUNK_OVERLAP 必填' })
-        .int({ message: 'CHUNK_OVERLAP 必须是整数' })
-        .min(0, { message: 'CHUNK_OVERLAP 不能为负' }),
-    )
-    .default(100),
+  CHUNK_SIZE: intEnv('CHUNK_SIZE', { positive: true }).default(800),
+  CHUNK_OVERLAP: intEnv('CHUNK_OVERLAP', { min: 0 }).default(100),
+
+  // ---- 摄入路径安全（可选；设置后 /ingest 只允许该目录内的路径）----
+  INGEST_ROOT: optionalString(),
 
   // ---- HTTP 服务 ----
-  PORT: z
-    .preprocess(
-      emptyToUndefined,
-      z.coerce
-        .number({ required_error: 'PORT 必填' })
-        .int({ message: 'PORT 必须是整数' })
-        .min(1, { message: 'PORT 必须在 1-65535 之间' })
-        .max(65535, { message: 'PORT 必须在 1-65535 之间' }),
-    )
-    .default(3000),
+  PORT: intEnv('PORT', { min: 1, max: 65535 }).default(3000),
   NODE_ENV: z
     .preprocess(
       emptyToUndefined,
@@ -148,6 +146,10 @@ export interface Config {
   lance: {
     dbPath: string;
   };
+  ingest: {
+    /** 限制 /ingest 可读的根目录（未设置则不限制，默认本地开发模式）。 */
+    root?: string;
+  };
   reranker: {
     model: string;
   };
@@ -189,6 +191,9 @@ export function resolveConfig(raw: RawConfig): Config {
     },
     lance: {
       dbPath: raw.LANCE_DB_PATH,
+    },
+    ingest: {
+      root: raw.INGEST_ROOT,
     },
     reranker: {
       model: raw.RERANKER_MODEL,

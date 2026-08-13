@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Config } from '../config/index.js';
 import type { Embedder } from './embedder.js';
 import { loadDocument, SUPPORTED_EXTENSIONS } from './loaders/index.js';
+import type { LoadedDocument } from './loaders/types.js';
 import type { DocumentChunk } from './splitter.js';
 import { splitDocument } from './splitter.js';
 import { LanceDBStore, type ChunkRecord } from './store/lancedb.js';
@@ -71,7 +72,7 @@ export class IngestPipeline implements IngestService {
       // 输入路径本身无效：记为一条失败，而非整个请求 500
       return {
         ingested: [],
-        failed: [{ sourcePath: inputPath, error: message(err) }],
+        failed: [{ sourcePath: inputPath, error: errorMessage(err) }],
       };
     }
 
@@ -79,43 +80,54 @@ export class IngestPipeline implements IngestService {
     const failed: FailedDoc[] = [];
     for (const file of files) {
       try {
+        this.assertWithinRoot(file);
         const buffer = await fs.readFile(file);
         const doc = await loadDocument({ buffer, sourcePath: file });
         const chunks = await splitDocument(doc, this.config.chunking);
         const vectors = await this.deps.embedder.embedTexts(chunks.map((c) => c.text));
-        const records = this.buildRecords(file, doc.metadata.title, doc.metadata.uploadedAt, chunks, vectors);
+        const records = this.buildRecords(doc, chunks, vectors);
         const docId = computeDocId(file);
         const chunkCount = await this.deps.store.upsertChunks(docId, records);
         ingested.push({ docId, sourcePath: file, chunkCount });
       } catch (err) {
-        failed.push({ sourcePath: file, error: message(err) });
+        failed.push({ sourcePath: file, error: errorMessage(err) });
       }
     }
     return { ingested, failed };
   }
 
   private buildRecords(
-    sourcePath: string,
-    title: string,
-    uploadedAt: string,
+    doc: LoadedDocument,
     chunks: DocumentChunk[],
     vectors: number[][],
   ): ChunkRecord[] {
-    const docId = computeDocId(sourcePath);
+    const docId = computeDocId(doc.metadata.sourcePath);
     return chunks.map((chunk, i) => ({
-      id: `${docId}#${i}`,
+      id: `${docId}#${chunk.metadata.chunkIndex}`,
       vector: vectors[i] as number[],
       text: chunk.text,
       docId,
       chunkIndex: chunk.metadata.chunkIndex,
-      title,
+      title: doc.metadata.title,
       sourcePath: chunk.metadata.sourcePath,
       sectionPath: chunk.metadata.sectionPath.join(' > '),
-      uploadedAt,
+      uploadedAt: doc.metadata.uploadedAt,
     }));
+  }
+
+  /** 若配置了 INGEST_ROOT，拒绝读取该目录之外的路径。 */
+  private assertWithinRoot(file: string): void {
+    const root = this.config.ingest.root;
+    if (!root) {
+      return;
+    }
+    const rel = path.relative(path.resolve(root), path.resolve(file));
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new Error(`路径超出允许的摄入根目录: ${file}`);
+    }
   }
 }
 
-function message(err: unknown): string {
+function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }

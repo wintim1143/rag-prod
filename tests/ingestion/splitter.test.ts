@@ -17,7 +17,7 @@ describe('splitter — 纯文本', () => {
   it('短文本切为单块', async () => {
     const chunks = await splitDocument(doc('短文本。', 'text'), { chunkSize: 100, chunkOverlap: 10 });
     expect(chunks).toHaveLength(1);
-    expect(chunks[0].metadata.sectionPath).toEqual([]);
+    expect(chunks[0]!.metadata.sectionPath).toEqual([]);
   });
 
   it('长文本切为多块，chunkIndex 连续，无章节路径', async () => {
@@ -35,8 +35,8 @@ describe('splitter — 纯文本', () => {
     const text = Array.from({ length: 200 }, (_, i) => `word${i} `).join('');
     const chunks = await splitDocument(doc(text, 'text'), { chunkSize: 50, chunkOverlap: 10 });
     expect(chunks.length).toBeGreaterThan(1);
-    const words0 = new Set(chunks[0].text.split(' ').filter(Boolean));
-    const words1 = new Set(chunks[1].text.split(' ').filter(Boolean));
+    const words0 = new Set(chunks[0]!.text.split(' ').filter(Boolean));
+    const words1 = new Set(chunks[1]!.text.split(' ').filter(Boolean));
     const shared = [...words0].filter((w) => words1.has(w));
     expect(shared.length).toBeGreaterThan(0);
   });
@@ -72,7 +72,7 @@ describe('splitter — Markdown 标题感知', () => {
       chunkOverlap: 10,
     });
     expect(chunks.length).toBeGreaterThanOrEqual(1);
-    expect(chunks[0].metadata.sectionPath).toEqual([]);
+    expect(chunks[0]!.metadata.sectionPath).toEqual([]);
   });
 
   it('标题块超 chunkSize 时子切后每块仍带前缀', async () => {
@@ -84,5 +84,24 @@ describe('splitter — Markdown 标题感知', () => {
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.every((c) => c.metadata.sectionPath.join(' > ') === '大节')).toBe(true);
     expect(chunks.every((c) => c.text.startsWith('[大节]'))).toBe(true);
+  });
+
+  it('代码围栏内内容不被递归切碎（整体一块，保留章节上下文）', async () => {
+    const md = '# 用法\n\n下面是代码：\n\n```js\n' + 'const x = 1;\n'.repeat(200) + '```\n\n结尾。';
+    const chunks = await splitDocument(doc(md, 'markdown'), { chunkSize: 50, chunkOverlap: 0 });
+    const codeChunk = chunks.find((c) => c.text.includes('```js'));
+    expect(codeChunk).toBeDefined();
+    expect(codeChunk?.text).toContain('const x = 1;');
+    expect(codeChunk?.metadata.sectionPath).toEqual(['用法']);
+    expect(codeChunk?.text.startsWith('[用法]')).toBe(true);
+  });
+
+  it('标题层级跳变（h1→h2→h4）时 sectionPath 不含空位', async () => {
+    const md = '# H1\n\nh1 内容\n\n## H2\n\nh2 内容\n\n#### H4\n\nh4 内容';
+    const chunks = await splitDocument(doc(md, 'markdown'), { chunkSize: 1000, chunkOverlap: 0 });
+    const h4 = chunks.find((c) => c.text.includes('h4 内容'));
+    expect(h4).toBeDefined();
+    expect(h4?.metadata.sectionPath.every(Boolean)).toBe(true);
+    expect(h4?.metadata.sectionPath.join(' > ')).not.toContain(' >  > ');
   });
 });

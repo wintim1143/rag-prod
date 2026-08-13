@@ -21,39 +21,71 @@ export interface DocumentChunk {
 /** 中英文通用的递归切分分隔符（中文按句切分，而非退化为按字符）。 */
 const SEPARATORS = ['\n\n', '\n', '。', '！', '？', '；', '，', ' ', ''];
 
-interface HeaderSection {
+interface MarkdownBlock {
+  kind: 'text' | 'code';
   content: string;
   path: string[];
 }
 
 /**
- * 按 1-4 级 markdown 标题把文本切成带章节路径的分节。
- * 标题行保留在 content 首行；path 记录标题链（`[h1, h2, ...]`）。
+ * 把 markdown 切成「普通文本块 + 代码块」序列，同时追踪标题链。
+ * - 标题层级跳变（如 h1→h2→h4）时过滤掉稀疏空位，sectionPath 恒为干净的标题数组。
+ * - 代码围栏（```/~~~）内整体作为一个 code 块，含围栏标记，后续不会被递归切碎。
  */
-function splitMarkdownByHeaders(text: string): HeaderSection[] {
-  const sections: HeaderSection[] = [];
+function splitMarkdownByBlocks(text: string): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = [];
   let path: string[] = [];
-  let lines: string[] = [];
-  const flush = () => {
-    if (lines.length > 0) {
-      sections.push({ content: lines.join('\n'), path: [...path] });
-      lines = [];
+  let textLines: string[] = [];
+  let codeLines: string[] = [];
+  let codePath: string[] = [];
+  let inCode = false;
+  let fence = '';
+
+  const cleanPath = (p: string[]): string[] => p.filter((entry): entry is string => Boolean(entry));
+  const flushText = () => {
+    if (textLines.length > 0) {
+      blocks.push({ kind: 'text', content: textLines.join('\n'), path: cleanPath(path) });
+      textLines = [];
+    }
+  };
+  const flushCode = () => {
+    if (codeLines.length > 0) {
+      blocks.push({ kind: 'code', content: codeLines.join('\n'), path: cleanPath(codePath) });
+      codeLines = [];
     }
   };
 
   for (const line of text.split('\n')) {
-    const match = line.match(/^(#{1,4})\s+(.+)$/);
-    if (match) {
-      flush();
-      const level = (match[1] as string).length;
-      path = path.slice(0, level - 1);
-      path[level - 1] = (match[2] as string).trim();
-      path = path.slice(0, level);
+    if (!inCode) {
+      const fenceMatch = line.match(/^\s*(```|~~~)/);
+      if (fenceMatch) {
+        flushText();
+        inCode = true;
+        fence = (fenceMatch[1] as string);
+        codePath = [...path];
+        codeLines.push(line);
+        continue;
+      }
+      const heading = line.match(/^(#{1,4})\s+(.+)$/);
+      if (heading) {
+        flushText();
+        const level = (heading[1] as string).length;
+        path = path.slice(0, level - 1);
+        path[level - 1] = (heading[2] as string).trim();
+        path = path.slice(0, level);
+      }
+      textLines.push(line);
+      continue;
     }
-    lines.push(line);
+    codeLines.push(line);
+    if (line.trim().startsWith(fence)) {
+      inCode = false;
+      flushCode();
+    }
   }
-  flush();
-  return sections;
+  flushText();
+  flushCode();
+  return blocks;
 }
 
 function makeRecursiveSplitter(config: ChunkingConfig): RecursiveCharacterTextSplitter {
@@ -66,8 +98,7 @@ function makeRecursiveSplitter(config: ChunkingConfig): RecursiveCharacterTextSp
 
 /**
  * 把加载的文档切成保留章节上下文的块。
- * - markdown：先按标题链分节，每节再按 chunkSize 子切，并把标题链前缀拼进块文本，
- *   使章节上下文可被检索/生成感知。
+ * - markdown：标题感知（保留章节路径与前缀）+ 代码块感知（围栏内不被切碎）。
  * - 其他格式：递归字符切分。
  */
 export async function splitDocument(
@@ -99,24 +130,33 @@ async function splitMarkdown(
   doc: LoadedDocument,
   config: ChunkingConfig,
 ): Promise<DocumentChunk[]> {
-  const sections = splitMarkdownByHeaders(doc.text);
+  const blocks = splitMarkdownByBlocks(doc.text);
   const recursive = makeRecursiveSplitter(config);
   const chunks: DocumentChunk[] = [];
   let chunkIndex = 0;
 
-  for (const section of sections) {
-    const subTexts = await recursive.splitText(section.content);
+  const pushChunk = (sectionPath: string[], text: string) => {
+    const prefixed = sectionPath.length > 0 ? `[${sectionPath.join(' > ')}]\n${text}` : text;
+    chunks.push({
+      text: prefixed,
+      metadata: {
+        chunkIndex: chunkIndex++,
+        sectionPath,
+        title: doc.metadata.title,
+        sourcePath: doc.metadata.sourcePath,
+      },
+    });
+  };
+
+  for (const block of blocks) {
+    if (block.kind === 'code') {
+      // 代码块是语义单元：整体一块（保留围栏标记），不交给递归切分
+      pushChunk(block.path, block.content);
+      continue;
+    }
+    const subTexts = await recursive.splitText(block.content);
     for (const text of subTexts) {
-      const prefixed = section.path.length > 0 ? `[${section.path.join(' > ')}]\n${text}` : text;
-      chunks.push({
-        text: prefixed,
-        metadata: {
-          chunkIndex: chunkIndex++,
-          sectionPath: section.path,
-          title: doc.metadata.title,
-          sourcePath: doc.metadata.sourcePath,
-        },
-      });
+      pushChunk(block.path, text);
     }
   }
   return chunks;

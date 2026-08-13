@@ -50,6 +50,7 @@ npm run typecheck             # tsc --noEmit
 | `EMBEDDING_API_KEY` | embedding 密钥 | `sk-...` |
 | `EMBEDDING_MODEL` | embedding 模型 | `text-embedding-3-small` |
 | `LANCE_DB_PATH` | LanceDB 目录 | `./data/lance` |
+| `INGEST_ROOT` | 限制 `/ingest` 可读的根目录（可选，默认不限制） | `./data` |
 | `RERANKER_MODEL` | 本地 cross-encoder 模型 id（HF） | `BAAI/bge-reranker-base` |
 | `PORT` | 服务端口 | `3000` |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | 分块大小 / 重叠 | `800` / `100` |
