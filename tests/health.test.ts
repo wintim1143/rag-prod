@@ -1,14 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { FastifyInstance } from 'fastify';
 import { loadConfig } from '../src/config/index.js';
 import { buildApp } from '../src/server/app.js';
 import { validEnv } from './helpers.js';
+
+const apps: FastifyInstance[] = [];
 
 async function makeApp() {
   const config = loadConfig({ env: validEnv() });
   const app = buildApp({ config, logger: false });
   await app.ready();
+  apps.push(app);
   return app;
 }
+
+afterEach(async () => {
+  while (apps.length) {
+    const app = apps.pop();
+    if (app) await app.close();
+  }
+});
 
 describe('GET /health', () => {
   it('返回 200 与 ok 状态', async () => {

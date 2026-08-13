@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig, type Config } from '../src/config/index.js';
 import { validEnv } from './helpers.js';
 
-function configError(run: () => Config): ConfigError {
+function captureConfigError(run: () => Config): ConfigError {
   try {
     run();
   } catch (err) {
@@ -69,7 +69,7 @@ describe('loadConfig — 有效配置', () => {
 describe('loadConfig — 校验失败', () => {
   it('缺失必填 LLM_API_KEY 抛出 ConfigError，报错含字段与原因', () => {
     const { LLM_API_KEY: _k, ...env } = validEnv();
-    const err = configError(() => loadConfig({ env }));
+    const err = captureConfigError(() => loadConfig({ env }));
     expect(err.message).toContain('LLM_API_KEY');
     expect(err.message).toContain('必填');
     expect(err.message).toContain('未设置');
@@ -77,28 +77,28 @@ describe('loadConfig — 校验失败', () => {
 
   it('LLM_BASE_URL 非法 URL 时给出清晰报错', () => {
     const env = { ...validEnv(), LLM_BASE_URL: 'not-a-url' };
-    const err = configError(() => loadConfig({ env }));
+    const err = captureConfigError(() => loadConfig({ env }));
     expect(err.message).toContain('LLM_BASE_URL');
     expect(err.message).toContain('合法 URL');
   });
 
   it('PORT 非数字时报错并展示当前值', () => {
     const env = { ...validEnv(), PORT: 'abc' };
-    const err = configError(() => loadConfig({ env }));
+    const err = captureConfigError(() => loadConfig({ env }));
     expect(err.message).toContain('PORT');
     expect(err.message).toContain('abc');
   });
 
   it('PORT 超出范围时报错', () => {
     const env = { ...validEnv(), PORT: '99999' };
-    const err = configError(() => loadConfig({ env }));
+    const err = captureConfigError(() => loadConfig({ env }));
     expect(err.message).toContain('PORT');
     expect(err.message).toContain('99999');
   });
 
   it('NODE_ENV 非法时报错', () => {
     const env = { ...validEnv(), NODE_ENV: 'staging' };
-    const err = configError(() => loadConfig({ env }));
+    const err = captureConfigError(() => loadConfig({ env }));
     expect(err.message).toContain('NODE_ENV');
     expect(err.message).toContain('staging');
   });
@@ -110,9 +110,16 @@ describe('loadConfig — 校验失败', () => {
       PORT: 'not-a-port',
       NODE_ENV: 'bad',
     };
-    const err = configError(() => loadConfig({ env }));
+    const err = captureConfigError(() => loadConfig({ env }));
     expect(err.message).toContain('LLM_API_KEY');
     expect(err.message).toContain('PORT');
     expect(err.message).toContain('NODE_ENV');
+  });
+
+  it('只设置部分 EMBEDDING_* 时报错（须三项同设或全空）', () => {
+    const env = { ...validEnv(), EMBEDDING_MODEL: 'text-embedding-3-small' };
+    const err = captureConfigError(() => loadConfig({ env }));
+    expect(err.message).toContain('EMBEDDING_*');
+    expect(err.message).toContain('三项同时设置');
   });
 });

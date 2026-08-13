@@ -11,12 +11,14 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@langchain/core": "^1.2.6",
+    "@langchain/openai": "^1.5.7",
     "dotenv": "^17.0.0",
     "fastify": "^5.0.0",
     "zod": "^3.25.0"

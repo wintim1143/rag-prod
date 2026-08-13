@@ -1,8 +1,16 @@
 import 'dotenv/config';
-import { loadConfig } from './config/index.js';
+import { loadConfig, type Config } from './config/index.js';
 import { buildApp } from './server/app.js';
 
-const config = loadConfig();
+let config: Config;
+try {
+  config = loadConfig();
+} catch (err) {
+  // 启动前无法使用 app.log，直接向 stderr 输出清晰的配置错误
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+}
+
 const app = buildApp({ config });
 
 try {

@@ -23,6 +23,16 @@ function requiredString(label: string) {
   );
 }
 
+/** 必填非空字符串，缺省时使用 fallback。 */
+function requiredStringWithDefault(label: string, fallback: string) {
+  return z
+    .preprocess(
+      emptyToUndefined,
+      z.string({ required_error: `${label} 必填` }).trim().min(1, { message: `${label} 不能为空` }),
+    )
+    .default(fallback);
+}
+
 /** 可选字符串（空串视为未设置）。 */
 function optionalString() {
   return z.preprocess(emptyToUndefined, z.string().trim().min(1).optional());
@@ -55,14 +65,10 @@ const envSchema = z.object({
   EMBEDDING_MODEL: optionalString(),
 
   // ---- 向量库 ----
-  LANCE_DB_PATH: z
-    .preprocess(emptyToUndefined, z.string({ required_error: 'LANCE_DB_PATH 必填' }).trim().min(1))
-    .default('./data/lance'),
+  LANCE_DB_PATH: requiredStringWithDefault('LANCE_DB_PATH', './data/lance'),
 
   // ---- 重排器（03 实现时到 HF 核验模型 id）----
-  RERANKER_MODEL: z
-    .preprocess(emptyToUndefined, z.string({ required_error: 'RERANKER_MODEL 必填' }).trim().min(1))
-    .default('BAAI/bge-reranker-base'),
+  RERANKER_MODEL: requiredStringWithDefault('RERANKER_MODEL', 'BAAI/bge-reranker-base'),
 
   // ---- HTTP 服务 ----
   PORT: z
@@ -81,6 +87,19 @@ const envSchema = z.object({
       z.enum(['development', 'test', 'production'], { required_error: 'NODE_ENV 必填' }),
     )
     .default('development'),
+}).superRefine((raw, ctx) => {
+  const provided = [
+    raw.EMBEDDING_BASE_URL,
+    raw.EMBEDDING_API_KEY,
+    raw.EMBEDDING_MODEL,
+  ].filter((v) => v !== undefined).length;
+  if (provided !== 0 && provided !== 3) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['EMBEDDING_BASE_URL'],
+      message: 'EMBEDDING_* 必须三项同时设置或全部留空，避免专用密钥/模型名错配 LLM 的 baseUrl',
+    });
+  }
 });
 
 type RawConfig = z.infer<typeof envSchema>;
@@ -121,7 +140,10 @@ export class ConfigError extends Error {
 
 /** 把 Embedding 缺省项回落到 LLM_*，产出最终 Config。 */
 export function resolveConfig(raw: RawConfig): Config {
-  const usesDedicatedProvider = raw.EMBEDDING_BASE_URL !== undefined;
+  const usesDedicatedProvider =
+    raw.EMBEDDING_BASE_URL !== undefined ||
+    raw.EMBEDDING_API_KEY !== undefined ||
+    raw.EMBEDDING_MODEL !== undefined;
   return {
     llm: {
       baseUrl: raw.LLM_BASE_URL,
