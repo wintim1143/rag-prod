@@ -4,6 +4,9 @@ import { LocalEmbedder, OpenAIEmbedder, type Embedder } from '../ingestion/embed
 import { IngestPipeline, type IngestService } from '../ingestion/pipeline.js';
 import { buildIngestRoutes } from '../ingestion/routes/ingest.js';
 import { LanceDBStore } from '../ingestion/store/lancedb.js';
+import { LocalReranker } from '../retrieval/reranker.js';
+import { buildSearchRoutes } from '../retrieval/routes/search.js';
+import { SearchPipeline, type SearchService } from '../retrieval/search.js';
 import { buildHealthRoutes } from './routes/health.js';
 
 export interface BuildAppOptions {
@@ -13,6 +16,7 @@ export interface BuildAppOptions {
   /** 服务依赖覆盖（测试注入 stub）；缺省构建生产实现。 */
   services?: {
     ingest?: IngestService;
+    search?: SearchService;
   };
 }
 
@@ -26,6 +30,15 @@ export function buildApp({
   app.register(buildHealthRoutes, { config });
   app.register(buildIngestRoutes, {
     ingest: services.ingest ?? new IngestPipeline(config, createIngestDeps(config)),
+  });
+  app.register(buildSearchRoutes, {
+    search:
+      services.search ??
+      new SearchPipeline(config, {
+        embedder: createEmbedder(config),
+        store: new LanceDBStore(config.lance.dbPath),
+        reranker: new LocalReranker(config.reranker.model),
+      }),
   });
   return app;
 }

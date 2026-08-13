@@ -12,7 +12,7 @@
 - **LanceDB 嵌入式**向量库（文件落盘、重启不丢、无独立服务进程）
 - **chat 用云 OpenAI 兼容 API**（baseURL 可配，兼容 DeepSeek 等）
 - **Embedding 默认本地**：Transformers.js + all-MiniLM-L6-v2（384 维，无需云 key）；可切云 `EMBEDDING_MODE=cloud`
-- **本地 cross-encoder**（bge-reranker 家族，Transformers.js）做重排，启发式兜底
+- **本地 cross-encoder**（Transformers.js，默认 `Xenova/ms-marco-MiniLM-L-6-v2`；bge-reranker 的 Transformers.js 版不可用）做重排，启发式兜底
 - **Fastify** 做 HTTP API；**Agentic + 流式**纳入本期（09）
 
 ## 架构与数据流
@@ -34,8 +34,8 @@
 |---|---|---|---|
 | 01 | 项目脚手架 + 配置中心（TS + Fastify + env 校验 + /health） | — | done ✅ (2026-08-13) |
 | 02 | 摄入管线（加载→切分→Embedding→LanceDB + /ingest） | 01 | done ✅ (2026-08-13) |
-| 03 | 混合检索 + 本地 cross-encoder 重排（/search 各环节分数） | 02 | **frontier，可开工** |
-| 04 | 问答/聊天端点（真实生成 + 引用，/ask 与 /chat） | 03 | pending |
+| 03 | 混合检索 + 本地 cross-encoder 重排（/search 各环节分数） | 02 | done ✅ (2026-08-13) |
+| 04 | 问答/聊天端点（真实生成 + 引用，/ask 与 /chat） | 03 | **frontier，可开工** |
 | 05 | 知识库管理 API（列表/删除/重索引/租户过滤） | 02 | pending |
 | 06 | 评估体系（评测集 30+ + LLM 判分 + 回归对比） | 04 | pending |
 | 07 | 检索诊断（单 query trace + 失败分类） | 03 | pending |
@@ -47,7 +47,7 @@
 ## 开放问题（开工时定，不要重复调研）
 
 - **09 号 agentic 层**：用 Vercel AI SDK，还是 LangChain 自身的 agent / langgraph（Node 版）？04 完成后再定，不影响依赖结构。
-- **bge-reranker 的 ONNX 模型 id**：实现 03 时到 HF 实际核验（`BAAI/bge-reranker-base` 等，中文/多语可用版本以当时为准）。
+- **bge-reranker 的 ONNX 模型 id**：已核验（2026-08-13）—— `Xenova/bge-reranker-*` 的 tokenizer 在 Transformers.js 有兼容 bug，不可用；默认改用 `Xenova/ms-marco-MiniLM-L-6-v2`（`RERANKER_MODEL` 可配）。该模型中文区分较弱，可后续换多语 cross-encoder。
 - **测试运行器**：已定 vitest（2026-08-13），见 README「测试与类型检查」。
 - **LLM 与 Embedding 是否同一 provider**：可由 env 配置（`EMBEDDING_BASE_URL` 缺省回落到 `LLM_BASE_URL`）。
 

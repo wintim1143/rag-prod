@@ -91,12 +91,17 @@ const envSchema = z.object({
   // ---- 向量库 ----
   LANCE_DB_PATH: requiredStringWithDefault('LANCE_DB_PATH', './data/lance'),
 
-  // ---- 重排器（03 实现时到 HF 核验模型 id）----
-  RERANKER_MODEL: requiredStringWithDefault('RERANKER_MODEL', 'BAAI/bge-reranker-base'),
+  // ---- 重排器（03：bge-reranker 家族的 Transformers.js 版 tokenizer 有兼容 bug，
+  //        默认用可用的 ms-marco cross-encoder；模型 id 可按需替换）----
+  RERANKER_MODEL: requiredStringWithDefault('RERANKER_MODEL', 'Xenova/ms-marco-MiniLM-L-6-v2'),
 
   // ---- 摄入切分（02 生效）----
   CHUNK_SIZE: intEnv('CHUNK_SIZE', { positive: true }).default(800),
   CHUNK_OVERLAP: intEnv('CHUNK_OVERLAP', { min: 0 }).default(100),
+
+  // ---- 检索（03 生效）----
+  RETRIEVAL_N: intEnv('RETRIEVAL_N', { min: 1 }).default(50),
+  RETRIEVAL_K: intEnv('RETRIEVAL_K', { min: 1 }).default(5),
 
   // ---- 摄入路径安全（可选；设置后 /ingest 只允许该目录内的路径）----
   INGEST_ROOT: optionalString(),
@@ -163,6 +168,12 @@ export interface Config {
     chunkSize: number;
     chunkOverlap: number;
   };
+  retrieval: {
+    /** 混合检索粗筛候选数（RRF 融合后进入重排的数量）。 */
+    n: number;
+    /** 重排后返回的 top-k。 */
+    k: number;
+  };
   server: {
     port: number;
     env: 'development' | 'test' | 'production';
@@ -208,6 +219,10 @@ export function resolveConfig(raw: RawConfig): Config {
     chunking: {
       chunkSize: raw.CHUNK_SIZE,
       chunkOverlap: raw.CHUNK_OVERLAP,
+    },
+    retrieval: {
+      n: raw.RETRIEVAL_N,
+      k: raw.RETRIEVAL_K,
     },
     server: {
       port: raw.PORT,

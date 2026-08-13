@@ -14,13 +14,35 @@ export interface ChunkRecord extends Record<string, unknown> {
   uploadedAt: string;
 }
 
+/** 命中的块（不带向量/分数）。 */
+export interface ChunkHit {
+  id: string;
+  text: string;
+  docId: string;
+  title: string;
+  sourcePath: string;
+  sectionPath: string;
+}
+
+/** 向量检索命中：distance 为余弦距离（越接近 0 越相似）。 */
+export interface VectorHit extends ChunkHit {
+  distance: number;
+}
+
+/** BM25 全文检索命中：score 为 BM25 相关分。 */
+export interface FtsHit extends ChunkHit {
+  score: number;
+}
+
 const DEFAULT_TABLE_NAME = 'chunks';
+const FTS_COLUMN = 'text';
+const SEARCH_COLUMNS = ['id', 'text', 'docId', 'title', 'sourcePath', 'sectionPath'];
 
 /**
  * LanceDB 嵌入式向量库存储层。
  *
- * 按 docId 维度管理：重复摄入同一 docId = 先删旧块再插入（更新而非重复），
- * 数据落盘，进程重启后仍可检索（满足验收「重启不丢」）。
+ * 按 docId 维度管理：重复摄入同一 docId = 先删旧块再插入（更新而非重复）。
+ * 支持向量检索（cosine）与 BM25 全文检索（FTS，tantivy 后端）。
  */
 export class LanceDBStore {
   private readonly dbPath: string;
@@ -42,6 +64,7 @@ export class LanceDBStore {
       await table.delete(`docId = '${docId}'`);
     }
     if (records.length === 0) {
+      await this.ensureFtsIndex();
       return 0;
     }
     if (table) {
@@ -49,6 +72,64 @@ export class LanceDBStore {
     } else {
       await db.createTable(this.tableName, records);
     }
+    // 数据变更后重建 FTS 索引，保证全文检索与最新数据一致
+    await this.ensureFtsIndex();
     return records.length;
+  }
+
+  /** 向量检索：cosine 最近邻。 */
+  async vectorSearch(vector: number[], limit: number): Promise<VectorHit[]> {
+    const table = await this.openOrNull();
+    if (!table) return [];
+    const rows = await table
+      .vectorSearch(vector)
+      .distanceType('cosine')
+      .limit(limit)
+      .select([...SEARCH_COLUMNS, '_distance'])
+      .toArray();
+    return rows.map((r) => ({ ...this.pick(r), distance: r._distance as number }));
+  }
+
+  /** BM25 全文检索。 */
+  async ftsSearch(query: string, limit: number): Promise<FtsHit[]> {
+    const table = await this.openOrNull();
+    if (!table) return [];
+    await this.ensureFtsIndex();
+    const match = new lancedb.MatchQuery(query, FTS_COLUMN);
+    const rows = await table
+      .search(match)
+      .limit(limit)
+      .select([...SEARCH_COLUMNS, '_score'])
+      .toArray();
+    return rows.map((r) => ({ ...this.pick(r), score: r._score as number }));
+  }
+
+  private async openOrNull(): Promise<lancedb.Table | null> {
+    const db = await lancedb.connect(this.dbPath);
+    const tableNames = await db.tableNames();
+    if (!tableNames.includes(this.tableName)) return null;
+    return db.openTable(this.tableName);
+  }
+
+  private pick(row: Record<string, unknown>): ChunkHit {
+    return {
+      id: row.id as string,
+      text: row.text as string,
+      docId: row.docId as string,
+      title: row.title as string,
+      sourcePath: row.sourcePath as string,
+      sectionPath: row.sectionPath as string,
+    };
+  }
+
+  /** 确保 FTS 索引存在（replace: true，覆盖重建，幂等）。 */
+  async ensureFtsIndex(): Promise<void> {
+    const table = await this.openOrNull();
+    if (!table) return;
+    await table.createIndex(FTS_COLUMN, {
+      config: lancedb.Index.fts(),
+      replace: true,
+      waitTimeoutSeconds: 60,
+    });
   }
 }

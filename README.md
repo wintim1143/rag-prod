@@ -54,11 +54,11 @@ npm run typecheck             # tsc --noEmit
 | `EMBEDDING_MODEL` | cloud 模式 embedding 模型 | `text-embedding-3-small` |
 | `LANCE_DB_PATH` | LanceDB 目录 | `./data/lance` |
 | `INGEST_ROOT` | 限制 `/ingest` 可读的根目录（可选，默认不限制） | `./data` |
-| `RERANKER_MODEL` | 本地 cross-encoder 模型 id（HF） | `BAAI/bge-reranker-base` |
+| `RERANKER_MODEL` | 本地 cross-encoder 模型 id（Transformers.js 可用版） | `Xenova/ms-marco-MiniLM-L-6-v2` |
 | `PORT` | 服务端口 | `3000` |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | 分块大小 / 重叠 | `800` / `100` |
 | `RETRIEVAL_N` / `RETRIEVAL_K` | 粗筛候选数 / 精排后 top-k | `50` / `5` |
-| `HYBRID` | 是否混合检索（向量 + BM25 + RRF） | `true` |
+| `HYBRID` | 混合检索（向量 + BM25 + RRF）固定开启 | `true` |
 | `QUERY_REWRITE` / `MULTI_QUERY` / `HYDE` | 查询优化开关（08） | `false` |
 
 ## 规划目录结构
@@ -88,6 +88,7 @@ rag-prod/
 
 - `GET /health` — 健康检查
 - `POST /ingest` — 摄入单文件或目录（**02 已实现**）；body `{ "path": "..." }`，返回 `{ ingested: [{docId, sourcePath, chunkCount}], failed: [...] }`
+- `POST /search` — 混合检索 + 本地重排（**03 已实现**）；body `{ query, n?, k? }`，返回排序块与各环节分数（向量/BM25/RRF/重排）
 - `POST /search` — 混合检索 + 重排（各环节分数可见）
 - `POST /ask` / `POST /chat` — 问答（带引用）；`/chat` 支持历史与流式/agentic
 - 文档管理：`GET /documents`、`DELETE /documents/:id`、重索引

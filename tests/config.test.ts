@@ -68,7 +68,7 @@ describe('loadConfig — 有效配置', () => {
   it('LANCE_DB_PATH / RERANKER_MODEL / PORT / NODE_ENV 使用默认值', () => {
     const config = loadConfig({ env: validEnv() });
     expect(config.lance.dbPath).toBe('./data/lance');
-    expect(config.reranker.model).toBe('BAAI/bge-reranker-base');
+    expect(config.reranker.model).toBe('Xenova/ms-marco-MiniLM-L-6-v2');
 
     const { PORT: _port, ...noPort } = validEnv();
     expect(loadConfig({ env: noPort }).server.port).toBe(3000);
