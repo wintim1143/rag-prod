@@ -8,6 +8,8 @@ import { LocalEmbedder, OpenAIEmbedder, type Embedder } from '../ingestion/embed
 import { IngestPipeline, type IngestService } from '../ingestion/pipeline.js';
 import { buildIngestRoutes } from '../ingestion/routes/ingest.js';
 import { LanceDBStore } from '../ingestion/store/lancedb.js';
+import { KnowledgeServiceImpl, type KnowledgeService } from '../knowledge/service.js';
+import { buildKnowledgeRoutes } from '../knowledge/routes/documents.js';
 import { LocalReranker } from '../retrieval/reranker.js';
 import { buildSearchRoutes } from '../retrieval/routes/search.js';
 import { SearchPipeline, type SearchService } from '../retrieval/search.js';
@@ -22,6 +24,7 @@ export interface BuildAppOptions {
     ingest?: IngestService;
     search?: SearchService;
     answer?: AnswerService;
+    knowledge?: KnowledgeService;
   };
 }
 
@@ -45,10 +48,18 @@ export function buildApp({
       store: new LanceDBStore(config.lance.dbPath),
       reranker: new LocalReranker(config.reranker.model),
     });
-  app.register(buildSearchRoutes, { search });
+  app.register(buildSearchRoutes, { search, config });
   const answer = services.answer ?? new AnswerPipeline(search, createChatProvider(config));
   app.register(buildAskRoutes, { answer });
   app.register(buildChatRoutes, { answer });
+  app.register(buildKnowledgeRoutes, {
+    knowledge:
+      services.knowledge ??
+      new KnowledgeServiceImpl(config, {
+        store: new LanceDBStore(config.lance.dbPath),
+        ingest: services.ingest ?? new IngestPipeline(config, createIngestDeps(config)),
+      }),
+  });
   return app;
 }
 

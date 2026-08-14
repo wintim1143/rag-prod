@@ -23,7 +23,7 @@ afterEach(async () => {
 });
 
 describe('POST /search', () => {
-  it('返回结果并把 query/n/k 传给服务', async () => {
+  it('返回结果并把 query/n/k/tenant 传给服务', async () => {
     const search = {
       search: vi.fn().mockResolvedValue({
         query: 'x',
@@ -39,7 +39,28 @@ describe('POST /search', () => {
       payload: { query: 'x', n: 20, k: 3 },
     });
     expect(res.statusCode).toBe(200);
-    expect(search.search).toHaveBeenCalledWith('x', { n: 20, k: 3 });
+    // 未带 X-Tenant 头 → 强制用默认租户过滤
+    expect(search.search).toHaveBeenCalledWith('x', { n: 20, k: 3, filter: { tenant: 'default' } });
+  });
+
+  it('X-Tenant 头覆盖默认租户过滤', async () => {
+    const search = {
+      search: vi.fn().mockResolvedValue({
+        query: 'x',
+        results: [],
+        stages: { retrievalN: 50, topK: 5, reranker: 'fallback' },
+      }),
+    };
+    const app = await makeApp(search);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/search',
+      headers: { 'x-tenant': 'tenant-42' },
+      payload: { query: 'x' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(search.search).toHaveBeenCalledWith('x', { n: undefined, k: undefined, filter: { tenant: 'tenant-42' } });
   });
 
   it('缺 query 返回 400', async () => {

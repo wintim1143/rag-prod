@@ -106,6 +106,9 @@ const envSchema = z.object({
   // ---- 摄入路径安全（可选；设置后 /ingest 只允许该目录内的路径）----
   INGEST_ROOT: optionalString(),
 
+  // ---- 租户（05 生效）：摄入时给块打的默认租户标记，检索 API 强制过滤 ----
+  DEFAULT_TENANT: requiredStringWithDefault('DEFAULT_TENANT', 'default'),
+
   // ---- HTTP 服务 ----
   PORT: intEnv('PORT', { min: 1, max: 65535 }).default(3000),
   NODE_ENV: z
@@ -161,6 +164,10 @@ export interface Config {
     /** 限制 /ingest 可读的根目录（未设置则不限制，默认本地开发模式）。 */
     root?: string;
   };
+  tenant: {
+    /** 摄入块默认归属的租户；检索 API 强制带 tenant 过滤。 */
+    default: string;
+  };
   reranker: {
     model: string;
   };
@@ -212,6 +219,9 @@ export function resolveConfig(raw: RawConfig): Config {
     },
     ingest: {
       root: raw.INGEST_ROOT,
+    },
+    tenant: {
+      default: raw.DEFAULT_TENANT,
     },
     reranker: {
       model: raw.RERANKER_MODEL,

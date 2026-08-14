@@ -88,8 +88,7 @@ export class IngestPipeline implements IngestService {
         const records = this.buildRecords(doc, chunks, vectors);
         const docId = computeDocId(file);
         const chunkCount = await this.deps.store.upsertChunks(docId, records);
-        ingested.push({ docId, sourcePath: file, chunkCount });
-      } catch (err) {
+        ingested.push({ docId, sourcePath: file, chunkCount });      } catch (err) {
         failed.push({ sourcePath: file, error: errorMessage(err) });
       }
     }
@@ -112,6 +111,7 @@ export class IngestPipeline implements IngestService {
       sourcePath: chunk.metadata.sourcePath,
       sectionPath: chunk.metadata.sectionPath.join(' > '),
       uploadedAt: doc.metadata.uploadedAt,
+      tenant: this.config.tenant.default,
     }));
   }
 

@@ -54,6 +54,7 @@ npm run typecheck             # tsc --noEmit
 | `EMBEDDING_MODEL` | cloud 模式 embedding 模型 | `text-embedding-3-small` |
 | `LANCE_DB_PATH` | LanceDB 目录 | `./data/lance` |
 | `INGEST_ROOT` | 限制 `/ingest` 可读的根目录（可选，默认不限制） | `./data` |
+| `DEFAULT_TENANT` | 摄入块默认租户；`/search` 强制按此（或 `X-Tenant` 头）过滤（05） | `default` |
 | `RERANKER_MODEL` | 本地 cross-encoder 模型 id（Transformers.js 可用版） | `Xenova/ms-marco-MiniLM-L-6-v2` |
 | `PORT` | 服务端口 | `3000` |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | 分块大小 / 重叠 | `800` / `100` |
@@ -92,7 +93,9 @@ rag-prod/
 - `POST /search` — 混合检索 + 重排（各环节分数可见）
 - `POST /ask` — 单轮问答（**04 已实现**）；body `{ query, k? }`，返回带 `[编号]` 引用的回答与来源块
 - `POST /chat` — 多轮对话（**04 已实现**）；body `{ messages: [{role, content}…], k? }`，短追问自动改写检索 query
-- 文档管理：`GET /documents`、`DELETE /documents/:id`、重索引（05）
+- `GET /documents` — 文档列表（**05 已实现**）：全部文档 + 块数 + 元数据
+- `DELETE /documents/:id` — 删除文档全部块（**05 已实现**）
+- `POST /documents/:id/reindex` — 按源路径重索引（**05 已实现**）
 - 诊断：trace 端点 / CLI（见 07）
 
 ## 文档索引

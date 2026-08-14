@@ -1,12 +1,15 @@
 import type { Config } from '../config/index.js';
 import type { Embedder } from '../ingestion/embedder.js';
-import type { LanceDBStore } from '../ingestion/store/lancedb.js';
+import type { ChunkFilter, LanceDBStore } from '../ingestion/store/lancedb.js';
 import { rrfMerge } from './rrf.js';
 import type { Reranker } from './reranker.js';
 import type { SearchResponse } from './types.js';
 
 export interface SearchService {
-  search(query: string, options?: { n?: number; k?: number }): Promise<SearchResponse>;
+  search(
+    query: string,
+    options?: { n?: number; k?: number; filter?: ChunkFilter },
+  ): Promise<SearchResponse>;
 }
 
 export interface SearchDeps {
@@ -18,6 +21,7 @@ export interface SearchDeps {
 /**
  * 检索管线：query 向量化 → 混合检索（向量 + BM25）→ RRF 融合（N 候选）→ cross-encoder 重排 → top-k。
  * 返回各环节分数（vector / bm25 / rrf / rerank），把「粗筛→精排」的取舍透明可见。
+ * filter 下推到向量与 BM25 检索（如租户隔离）。
  */
 export class SearchPipeline implements SearchService {
   constructor(
@@ -25,7 +29,10 @@ export class SearchPipeline implements SearchService {
     private readonly deps: SearchDeps,
   ) {}
 
-  async search(query: string, options: { n?: number; k?: number } = {}): Promise<SearchResponse> {
+  async search(
+    query: string,
+    options: { n?: number; k?: number; filter?: ChunkFilter } = {},
+  ): Promise<SearchResponse> {
     const n = options.n ?? this.config.retrieval.n;
     const k = options.k ?? this.config.retrieval.k;
     const trimmed = query.trim();
@@ -35,8 +42,8 @@ export class SearchPipeline implements SearchService {
 
     const queryVector = (await this.deps.embedder.embedTexts([trimmed]))[0] as number[];
     const [vectorHits, ftsHits] = await Promise.all([
-      this.deps.store.vectorSearch(queryVector, n),
-      this.deps.store.ftsSearch(trimmed, n),
+      this.deps.store.vectorSearch(queryVector, n, options.filter),
+      this.deps.store.ftsSearch(trimmed, n, options.filter),
     ]);
 
     const merged = rrfMerge(vectorHits, ftsHits);

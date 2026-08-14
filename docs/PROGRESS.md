@@ -12,7 +12,8 @@
 | 02 摄入管线 + `/ingest` | done ✅ | 无（向量化 = 本地 all-MiniLM-L6-v2，无需 key） |
 | 03 混合检索 + 本地重排 | done ✅ | 无（重排 = 本地 cross-encoder ms-marco） |
 | 04 问答/聊天（/ask /chat） | done ✅ | **是 — 云 chat LLM**（已配 opencode `deepseek-v4-flash`） |
-| 05 知识库管理 API | **frontier（未开工）** | 无 |
+| 05 知识库管理 API | done ✅ | 无 |
+| 06 评估体系（LLM 判分 + 回归） | **frontier（未开工）** | **是 — 云 chat LLM 判分** |
 
 ## 已完成工作
 
@@ -49,12 +50,20 @@
   - 「健康检查端点是什么？」→ 拒答（检索 top3 未覆盖该句，诚实拒答而非编造）
 - **LLM 依赖**：是 —— 云 chat LLM（`LLM_BASE_URL/LLM_API_KEY/LLM_MODEL`）。离线测试用桩 provider（`tests/generation/*`）。
 
+### 05 知识库管理 API（done ✅）
+
+- **完成**：`src/knowledge/`——`GET /documents`（全部文档 + 块数 + title/sourcePath/tenant）、`DELETE /documents/:docId`（删除全部块 + 重建 FTS）、`POST /documents/:docId/reindex`（按 sourcePath 重新摄入 = 原地更新旧块，不存在 404）；LanceDBStore 新增 `listDocuments/deleteDocument`；检索支持 `filter`（tenant/docId）下推到向量 + BM25 的 `.where()`；`ChunkRecord` 增加 `tenant` 列（摄入时写 `DEFAULT_TENANT`，默认 `default`）。
+- **租户隔离强制**：`POST /search` 从 `X-Tenant` 请求头读租户（缺省 `DEFAULT_TENANT`），强制作为过滤条件下推——调用方无法发起不带租户范围的跨租户检索。
+- **可人工验证**：`GET /documents` 列表；`DELETE /documents/<docId>` 删除后列表与检索均不含该文档；`POST /documents/<docId>/reindex` 重索引；`/search` 带 `X-Tenant: other-tenant` 无结果而默认租户有结果。
+- **实测**：摄入 3 文档 → 列表 3 项（含 tenant）；删除 api.md → 4 块消失、列表剩 2；reindex 正常、不存在 docId 返回 404；default 租户检索 5 命中、other-tenant 0 命中。
+- **LLM 依赖**：无（全部本地）。注意：表 schema 新增 tenant 列后，旧库需重建（删除 `data/lance` 后重新摄入）。
+
 ## 待办（frontier）
 
-### 05 知识库管理 API
+### 06 评估体系（LLM 判分 + 回归）
 
-- 内容：文档级管理（列表/删除/重索引）+ 检索元数据过滤（tenant/docId，API 强制不可绕过）。
-- LLM 依赖：无。
+- 内容：评测集 30+ 条 + 四指标 LLM 判分（faithfulness / answer relevance / context precision / context recall）+ 配置回归运行器产基线表。
+- LLM 依赖：是 —— 云 chat LLM 做 judge 打分。
 
 ## LLM 依赖矩阵
 

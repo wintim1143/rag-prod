@@ -12,6 +12,24 @@ export interface ChunkRecord extends Record<string, unknown> {
   sourcePath: string;
   sectionPath: string;
   uploadedAt: string;
+  /** 租户/命名空间标记（检索层过滤维度；API 强制带 tenant）。 */
+  tenant?: string;
+}
+
+/** 检索/管理接口的过滤条件（下推到 LanceDB where 子句）。 */
+export interface ChunkFilter {
+  tenant?: string;
+  docId?: string;
+}
+
+/** 文档级元数据（知识库管理 API 的返回形状）。 */
+export interface DocumentMeta {
+  docId: string;
+  title: string;
+  sourcePath: string;
+  chunkCount: number;
+  uploadedAt: string;
+  tenant?: string;
 }
 
 /** 命中的块（不带向量/分数）。 */
@@ -77,31 +95,76 @@ export class LanceDBStore {
     return records.length;
   }
 
-  /** 向量检索：cosine 最近邻。 */
-  async vectorSearch(vector: number[], limit: number): Promise<VectorHit[]> {
+  /** 向量检索：cosine 最近邻。filter 下推为 where 子句。 */
+  async vectorSearch(vector: number[], limit: number, filter?: ChunkFilter): Promise<VectorHit[]> {
     const table = await this.openOrNull();
     if (!table) return [];
-    const rows = await table
-      .vectorSearch(vector)
-      .distanceType('cosine')
-      .limit(limit)
-      .select([...SEARCH_COLUMNS, '_distance'])
-      .toArray();
+    let query = table.vectorSearch(vector).distanceType('cosine').limit(limit);
+    const where = this.buildWhere(filter);
+    if (where) query = query.where(where);
+    const rows = await query.select([...SEARCH_COLUMNS, '_distance']).toArray();
     return rows.map((r) => ({ ...this.pick(r), distance: r._distance as number }));
   }
 
-  /** BM25 全文检索。 */
-  async ftsSearch(query: string, limit: number): Promise<FtsHit[]> {
+  /** BM25 全文检索。filter 下推为 where 子句。 */
+  async ftsSearch(query: string, limit: number, filter?: ChunkFilter): Promise<FtsHit[]> {
     const table = await this.openOrNull();
     if (!table) return [];
     await this.ensureFtsIndex();
     const match = new lancedb.MatchQuery(query, FTS_COLUMN);
-    const rows = await table
-      .search(match)
-      .limit(limit)
-      .select([...SEARCH_COLUMNS, '_score'])
-      .toArray();
+    let search = table.search(match).limit(limit);
+    const where = this.buildWhere(filter);
+    if (where) search = search.where(where);
+    const rows = await search.select([...SEARCH_COLUMNS, '_score']).toArray();
     return rows.map((r) => ({ ...this.pick(r), score: r._score as number }));
+  }
+
+  /** 列出全部文档（按 docId 聚合块数 + 元数据）。 */
+  async listDocuments(filter?: ChunkFilter): Promise<DocumentMeta[]> {
+    const table = await this.openOrNull();
+    if (!table) return [];
+    const where = this.buildWhere(filter);
+    const rows = (where ? await table.query().where(where).toArray() : await table.query().toArray()) as Record<
+      string,
+      unknown
+    >[];
+    const byDoc = new Map<string, DocumentMeta>();
+    for (const row of rows) {
+      const docId = row.docId as string;
+      const entry = byDoc.get(docId) ?? {
+        docId,
+        title: row.title as string,
+        sourcePath: row.sourcePath as string,
+        chunkCount: 0,
+        uploadedAt: row.uploadedAt as string,
+        tenant: (row.tenant as string | undefined) ?? undefined,
+      };
+      entry.chunkCount += 1;
+      byDoc.set(docId, entry);
+    }
+    return [...byDoc.values()].sort((a, b) => a.docId.localeCompare(b.docId));
+  }
+
+  /** 删除某 docId 的全部块；返回删除的块数。 */
+  async deleteDocument(docId: string): Promise<number> {
+    const table = await this.openOrNull();
+    if (!table) return 0;
+    const result = await table.delete(`docId = '${docId}'`);
+    const deleted = typeof result === 'number' ? result : result.numDeletedRows ?? 0;
+    await this.rebuildFtsIndex();
+    return deleted;
+  }
+
+  /** 把结构化过滤条件转成 LanceDB where 子句（对值做引号转义）。 */
+  private buildWhere(filter?: ChunkFilter): string | undefined {
+    const clauses: string[] = [];
+    if (filter?.docId) {
+      clauses.push(`docId = '${escapeSql(filter.docId)}'`);
+    }
+    if (filter?.tenant) {
+      clauses.push(`tenant = '${escapeSql(filter.tenant)}'`);
+    }
+    return clauses.length > 0 ? clauses.join(' AND ') : undefined;
   }
 
   private async openOrNull(): Promise<lancedb.Table | null> {
@@ -145,4 +208,9 @@ export class LanceDBStore {
       waitTimeoutSeconds: 60,
     });
   }
+}
+
+/** 把值转义进 where 子句的 SQL 字符串字面量（防单引号注入）。 */
+function escapeSql(value: string): string {
+  return value.replace(/'/g, "''");
 }
