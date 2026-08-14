@@ -1,7 +1,7 @@
 # 项目进度（PROGRESS）
 
-> 更新时间：2026-08-13
-> 自动化验证基线：`npm run typecheck` + `npm test`（57 用例，覆盖率门槛 ≥80%）
+> 更新时间：2026-08-14
+> 自动化验证基线：`npm run typecheck` + `npm test`（78 用例，覆盖率门槛 ≥80%）
 > 本文件记录：**已完成什么 / 可人工验证什么 / 依赖 LLM 什么**。切片明细见 `docs/tickets/`，路线图见 CLAUDE.md。
 
 ## 当前状态速览
@@ -11,7 +11,8 @@
 | 01 脚手架 + 配置中心 | done ✅ | 无 |
 | 02 摄入管线 + `/ingest` | done ✅ | 无（向量化 = 本地 all-MiniLM-L6-v2，无需 key） |
 | 03 混合检索 + 本地重排 | done ✅ | 无（重排 = 本地 cross-encoder ms-marco） |
-| 04 问答/聊天（/ask /chat） | **frontier（未开工）** | **是 — 云 chat LLM**（需 `LLM_BASE_URL/API_KEY/MODEL`） |
+| 04 问答/聊天（/ask /chat） | done ✅ | **是 — 云 chat LLM**（已配 opencode `deepseek-v4-flash`） |
+| 05 知识库管理 API | **frontier（未开工）** | 无 |
 
 ## 已完成工作
 
@@ -38,12 +39,22 @@
 - **已知限制**：ms-marco 是英文 cross-encoder，中文 query 区分较弱（分数趋近 0 但排序可用）；启发式兜底对中文词重叠有效。
 - **LLM 依赖**：无（向量、FTS、重排全部本地）。
 
+### 04 问答/聊天端点（done ✅）
+
+- **完成**：`src/generation/`——OpenAI 兼容 `ChatProvider`（`@langchain/openai` ChatOpenAI，配置来自 `config.llm`）；prompt 组装把检索块编号为 `[1][2]…` 并强约束「只依据资料作答、未知时拒答」；`AnswerPipeline` 编排 检索→生成→引用解析；`POST /ask`（单轮）、`POST /chat`（多轮，短追问自动拼接上一轮 user 消息改写检索 query）。
+- **可人工验证（需要 LLM key）**：`POST /ask {"query":"摄入管线把文档写入哪里？"}` → 回答带 `[1]` 引用；`POST /chat` 多轮短追问「写入哪里？」→ query 改写为「摄入管线 写入哪里？」；问库外问题 → 拒答「资料中没有相关内容」。
+- **实测**（opencode `deepseek-v4-flash`）：
+  - 「摄入管线把文档写入哪里？」→ `摄入管线将文档处理后写入 LanceDB 向量库。[1]`
+  - 短追问改写生效：「写入哪里？」→「摄入管线 写入哪里？」→ 正确引用
+  - 「健康检查端点是什么？」→ 拒答（检索 top3 未覆盖该句，诚实拒答而非编造）
+- **LLM 依赖**：是 —— 云 chat LLM（`LLM_BASE_URL/LLM_API_KEY/LLM_MODEL`）。离线测试用桩 provider（`tests/generation/*`）。
+
 ## 待办（frontier）
 
-### 04 问答/聊天端点（/ask 与 /chat）
+### 05 知识库管理 API
 
-- 内容：检索结果 + 引用 → 云 chat LLM 生成带 `[编号]` 引用的回答；`/chat` 支持历史。
-- LLM 依赖：**是 — 云 chat LLM**（这是本项目第一个真正需要 `LLM_API_KEY` 的切片）。
+- 内容：文档级管理（列表/删除/重索引）+ 检索元数据过滤（tenant/docId，API 强制不可绕过）。
+- LLM 依赖：无。
 
 ## LLM 依赖矩阵
 

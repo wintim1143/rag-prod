@@ -1,5 +1,9 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Config } from '../config/index.js';
+import { createChatProvider } from '../generation/llm.js';
+import { buildAskRoutes } from '../generation/routes/ask.js';
+import { buildChatRoutes } from '../generation/routes/chat.js';
+import { AnswerPipeline, type AnswerService } from '../generation/service.js';
 import { LocalEmbedder, OpenAIEmbedder, type Embedder } from '../ingestion/embedder.js';
 import { IngestPipeline, type IngestService } from '../ingestion/pipeline.js';
 import { buildIngestRoutes } from '../ingestion/routes/ingest.js';
@@ -17,6 +21,7 @@ export interface BuildAppOptions {
   services?: {
     ingest?: IngestService;
     search?: SearchService;
+    answer?: AnswerService;
   };
 }
 
@@ -31,15 +36,19 @@ export function buildApp({
   app.register(buildIngestRoutes, {
     ingest: services.ingest ?? new IngestPipeline(config, createIngestDeps(config)),
   });
-  app.register(buildSearchRoutes, {
-    search:
-      services.search ??
-      new SearchPipeline(config, {
-        embedder: createEmbedder(config),
-        store: new LanceDBStore(config.lance.dbPath),
-        reranker: new LocalReranker(config.reranker.model),
-      }),
-  });
+
+  // search 与 answer 共享同一 search 实例（answer 复用检索管线）
+  const search =
+    services.search ??
+    new SearchPipeline(config, {
+      embedder: createEmbedder(config),
+      store: new LanceDBStore(config.lance.dbPath),
+      reranker: new LocalReranker(config.reranker.model),
+    });
+  app.register(buildSearchRoutes, { search });
+  const answer = services.answer ?? new AnswerPipeline(search, createChatProvider(config));
+  app.register(buildAskRoutes, { answer });
+  app.register(buildChatRoutes, { answer });
   return app;
 }
 

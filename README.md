@@ -90,8 +90,9 @@ rag-prod/
 - `POST /ingest` — 摄入单文件或目录（**02 已实现**）；body `{ "path": "..." }`，返回 `{ ingested: [{docId, sourcePath, chunkCount}], failed: [...] }`
 - `POST /search` — 混合检索 + 本地重排（**03 已实现**）；body `{ query, n?, k? }`，返回排序块与各环节分数（向量/BM25/RRF/重排）
 - `POST /search` — 混合检索 + 重排（各环节分数可见）
-- `POST /ask` / `POST /chat` — 问答（带引用）；`/chat` 支持历史与流式/agentic
-- 文档管理：`GET /documents`、`DELETE /documents/:id`、重索引
+- `POST /ask` — 单轮问答（**04 已实现**）；body `{ query, k? }`，返回带 `[编号]` 引用的回答与来源块
+- `POST /chat` — 多轮对话（**04 已实现**）；body `{ messages: [{role, content}…], k? }`，短追问自动改写检索 query
+- 文档管理：`GET /documents`、`DELETE /documents/:id`、重索引（05）
 - 诊断：trace 端点 / CLI（见 07）
 
 ## 文档索引
