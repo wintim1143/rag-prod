@@ -1,7 +1,7 @@
 # 项目进度（PROGRESS）
 
 > 更新时间：2026-08-14
-> 自动化验证基线：`npm run typecheck` + `npm test`（78 用例，覆盖率门槛 ≥80%）
+> 自动化验证基线：`npm run typecheck` + `npm test`（105 用例，覆盖率门槛 ≥80%）
 > 本文件记录：**已完成什么 / 可人工验证什么 / 依赖 LLM 什么**。切片明细见 `docs/tickets/`，路线图见 CLAUDE.md。
 
 ## 当前状态速览
@@ -13,7 +13,8 @@
 | 03 混合检索 + 本地重排 | done ✅ | 无（重排 = 本地 cross-encoder ms-marco） |
 | 04 问答/聊天（/ask /chat） | done ✅ | **是 — 云 chat LLM**（已配 opencode `deepseek-v4-flash`） |
 | 05 知识库管理 API | done ✅ | 无 |
-| 06 评估体系（LLM 判分 + 回归） | **frontier（未开工）** | **是 — 云 chat LLM 判分** |
+| 06 评估体系（LLM 判分 + 回归） | done ✅ | **是 — 云 chat LLM 判分**（judge 用同一 chat provider） |
+| 07 检索诊断 | **frontier（未开工）** | 无 |
 
 ## 已完成工作
 
@@ -58,12 +59,20 @@
 - **实测**：摄入 3 文档 → 列表 3 项（含 tenant）；删除 api.md → 4 块消失、列表剩 2；reindex 正常、不存在 docId 返回 404；default 租户检索 5 命中、other-tenant 0 命中。
 - **LLM 依赖**：无（全部本地）。注意：表 schema 新增 tenant 列后，旧库需重建（删除 `data/lance` 后重新摄入）。
 
+### 06 评估体系（done ✅）
+
+- **完成**：`src/eval/`——评测集 33 条真实 Q&A（基于 data/sample 三篇文档，`expectedSources` 标注标准相关源，含库外问题）随仓库管理；四指标 LLM 判分（faithfulness / answer relevance / context precision / context recall，judge prompt 约束只输出 0-1，复用 chat provider）；回归运行器 `runVariant`（检索→生成→判分→聚合）+ `compareVariants`（跌破阈值判回归）；`npm run eval` 完整运行基线 + k 变体，输出可提交 JSON，有回归时非零退出。
+- **可人工验证**：`npm run eval`（全量 ~396 次 LLM 判分，较慢）；`EVAL_MAX_SAMPLES=3 npm run eval` 冒烟。
+- **实测**（3 样本 + 真实 judge）：baseline k3 → faithfulness 1.0 / relevance 1.0 / precision 0.2 / recall 1.0；k1 变体全面下滑，回归运行器正确报 k1 回归（faithfulness/relevance/recall）。context_precision 偏低符合预期（ms-marco 对中文区分弱）。
+- **LLM 依赖**：是 —— judge 用同一云 chat LLM（`config.llm`）。离线测试用桩 provider（`tests/eval/*`，含 CI 冒烟子集）。
+
 ## 待办（frontier）
 
-### 06 评估体系（LLM 判分 + 回归）
+### 07 检索诊断（单 query trace + 失败分类）
 
-- 内容：评测集 30+ 条 + 四指标 LLM 判分（faithfulness / answer relevance / context precision / context recall）+ 配置回归运行器产基线表。
-- LLM 依赖：是 —— 云 chat LLM 做 judge 打分。
+- 内容：对单次检索输出各环节 trace（向量/BM25/RRF/重排分数 + 命中来源）与失败分类，定位检索问题。
+- Blocked by：03（已满足）。
+- LLM 依赖：无。
 
 ## LLM 依赖矩阵
 
@@ -73,23 +82,32 @@
 | 文档加载 / 切分 | 否 | unpdf / mammoth / cheerio，纯本地 |
 | 向量化（摄入） | 否（默认） | Transformers.js + all-MiniLM-L6-v2 本地；`EMBEDDING_MODE=cloud` 时需云 key |
 | 混合检索 / 重排 | 否 | 向量 + BM25（LanceDB）+ 本地 cross-encoder |
-| 问答生成（04，未开工） | **是 — 云 chat LLM** | 需 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` |
+| 问答生成（04） | **是 — 云 chat LLM** | 需 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` |
+| 知识库管理 / 租户过滤（05） | 否 | 纯本地 |
+| 评估判分（06） | **是 — 云 chat LLM judge** | 复用 `config.llm`；离线测试用桩 |
 
 ## 人工验证清单（从零复现）
 
 ```bash
-cp .env.example .env            # 无需填任何 key 即可验证 01-03（模型首次自动下载）
+cp .env.example .env            # 无需填任何 key 即可验证 01-03/05（模型首次自动下载）
 npm install
 npm run typecheck
-npm test                        # 57 用例 + 覆盖率门槛（mock 向量 / stub 重排）
+npm test                        # 105 用例 + 覆盖率门槛（mock 向量 / stub 重排 / 桩 judge）
 npm run dev
 curl http://127.0.0.1:3000/health
 # 摄入（默认本地 embedding，无需 key）
 curl -X POST http://127.0.0.1:3000/ingest -H 'Content-Type: application/json' \
   -d '{"path":"./data/sample"}'
-# 检索（混合 + 重排，各环节分数可见）
+# 检索（混合 + 重排，各环节分数可见；强制带默认租户过滤）
 curl -X POST http://127.0.0.1:3000/search -H 'Content-Type: application/json' \
   -d '{"query":"Fastify 端口"}'
+# 问答（04，需 LLM key）
+curl -X POST http://127.0.0.1:3000/ask -H 'Content-Type: application/json' \
+  -d '{"query":"摄入管线把文档写入哪里？"}'
+# 知识库管理（05）
+curl http://127.0.0.1:3000/documents
+# 评估（06，需 LLM key 判分；EVAL_MAX_SAMPLES=3 冒烟）
+EVAL_MAX_SAMPLES=3 npm run eval
 ```
 
 ## 备注

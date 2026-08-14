@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-08-14T06:36:07.413Z",
+  "sampleCount": 33,
+  "baseline": {
+    "faithfulness": 1,
+    "answer_relevance": 0.7212121212121213,
+    "context_precision": 0.17575757575757578,
+    "context_recall": 0.8333333333333334
+  },
+  "variants": [
+    {
+      "variant": "k1",
+      "averages": {
+        "faithfulness": 0.9696969696969697,
+        "answer_relevance": 0.5454545454545454,
+        "context_precision": 0.4696969696969697,
+        "context_recall": 0.696969696969697
+      }
+    },
+    {
+      "variant": "k5",
+      "averages": {
+        "faithfulness": 1,
+        "answer_relevance": 0.7030303030303031,
+        "context_precision": 0.18787878787878792,
+        "context_recall": 0.8233333333333334
+      }
+    }
+  ],
+  "regressions": [
+    {
+      "variant": "k1",
+      "metric": "answer_relevance",
+      "baselineScore": 0.7212121212121213,
+      "variantScore": 0.5454545454545454,
+      "threshold": 0.05
+    },
+    {
+      "variant": "k1",
+      "metric": "context_recall",
+      "baselineScore": 0.8333333333333334,
+      "variantScore": 0.696969696969697,
+      "threshold": 0.05
+    }
+  ]
+}

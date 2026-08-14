@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "eval": "tsx src/eval/cli.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

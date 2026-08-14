@@ -1,6 +1,6 @@
 # CLAUDE.md — rag-prod 会话上下文
 
-> 面向在新项目目录里开工的 agent 的交接文档。新会话先读这份 + `docs/tickets/` + `docs/PROGRESS.md`，从 frontier（03）开始。
+> 面向在新项目目录里开工的 agent 的交接文档。新会话先读这份 + `docs/tickets/` + `docs/PROGRESS.md`，从 frontier（07）开始。
 
 ## 项目使命
 
@@ -35,10 +35,10 @@
 | 01 | 项目脚手架 + 配置中心（TS + Fastify + env 校验 + /health） | — | done ✅ (2026-08-13) |
 | 02 | 摄入管线（加载→切分→Embedding→LanceDB + /ingest） | 01 | done ✅ (2026-08-13) |
 | 03 | 混合检索 + 本地 cross-encoder 重排（/search 各环节分数） | 02 | done ✅ (2026-08-13) |
-| 04 | 问答/聊天端点（真实生成 + 引用，/ask 与 /chat） | 03 | **frontier，可开工** |
-| 05 | 知识库管理 API（列表/删除/重索引/租户过滤） | 02 | pending |
-| 06 | 评估体系（评测集 30+ + LLM 判分 + 回归对比） | 04 | pending |
-| 07 | 检索诊断（单 query trace + 失败分类） | 03 | pending |
+| 04 | 问答/聊天端点（真实生成 + 引用，/ask 与 /chat） | 03 | done ✅ (2026-08-14) |
+| 05 | 知识库管理 API（列表/删除/重索引/租户过滤） | 02 | done ✅ (2026-08-14) |
+| 06 | 评估体系（评测集 30+ + LLM 判分 + 回归对比） | 04 | done ✅ (2026-08-14) |
+| 07 | 检索诊断（单 query trace + 失败分类） | 03 | **frontier，可开工** |
 | 08 | 查询优化（多查询/HyDE/改写，评估证明召回提升） | 03, 06 | pending |
 | 09 | Agentic + 流式聊天（检索作工具调用，与 04 可切换） | 04 | pending |
 
@@ -63,6 +63,6 @@
 ```bash
 npm run dev      # 起服务
 npm test         # 跑测试
-npm run eval     # 跑评估（06 落地后）
+npm run eval     # 跑评估（06 已落地；EVAL_MAX_SAMPLES=3 冒烟）
 npm run ingest   # CLI 摄入（02 落地前可用）
 ```
