@@ -4,9 +4,9 @@
 
 **Blocked by:** 03 — 混合检索 + 本地 cross-encoder 重排
 
-**Status:** ready-for-agent
+**Status:** done ✅ (2026-08-17)
 
-- [ ] trace 端点/CLI 对单条 query 打印每阶段结果与分数
-- [ ] 失败分类器给出 a–d 之一并附证据（如 BM25 命中但向量未命中 ⇒ Embedding/query 不匹配）
-- [ ] 报告可写文件分享
-- [ ] 用一组「已知会错」的 query 做测试，标注其期望失败类别
+- [x] trace 端点/CLI 对单条 query 打印每阶段结果与分数
+- [x] 失败分类器给出 a–d 之一并附证据（如 BM25 命中但向量未命中 ⇒ Embedding/query 不匹配）
+- [x] 报告可写文件分享
+- [x] 用一组「已知会错」的 query 做测试，标注其期望失败类别

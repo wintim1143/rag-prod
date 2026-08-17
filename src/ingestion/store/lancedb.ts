@@ -119,6 +119,17 @@ export class LanceDBStore {
     return rows.map((r) => ({ ...this.pick(r), score: r._score as number }));
   }
 
+  /** 扫描全部块的 id+text（不带向量/分数），供检索诊断的 query 词覆盖探测。 */
+  async scanChunks(filter?: ChunkFilter): Promise<{ id: string; text: string }[]> {
+    const table = await this.openOrNull();
+    if (!table) return [];
+    const where = this.buildWhere(filter);
+    const rows = (where
+      ? await table.query().where(where).select(['id', 'text']).toArray()
+      : await table.query().select(['id', 'text']).toArray()) as Record<string, unknown>[];
+    return rows.map((r) => ({ id: r.id as string, text: r.text as string }));
+  }
+
   /** 列出全部文档（按 docId 聚合块数 + 元数据）。 */
   async listDocuments(filter?: ChunkFilter): Promise<DocumentMeta[]> {
     const table = await this.openOrNull();

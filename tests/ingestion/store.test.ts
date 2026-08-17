@@ -69,6 +69,27 @@ describe('LanceDBStore — 文档生命周期', () => {
   });
 });
 
+describe('LanceDBStore — scanChunks 文本扫描', () => {
+  it('返回全部块的 id+text（供 query 词覆盖探测）', async () => {
+    const store = new LanceDBStore(tmpDir);
+    await seed(store);
+
+    const chunks = await store.scanChunks();
+    expect(chunks.length).toBe(3);
+    const a = chunks.find((c) => c.id === 'doc-a#0');
+    expect(a).toMatchObject({ id: 'doc-a#0', text: '块doc-a-0' });
+  });
+
+  it('支持 tenant 过滤', async () => {
+    const store = new LanceDBStore(tmpDir);
+    await seed(store);
+
+    const chunks = await store.scanChunks({ tenant: 'tenant-x' });
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.id).toBe('doc-b#0');
+  });
+});
+
 describe('LanceDBStore — 检索过滤', () => {
   it('vectorSearch 支持 tenant 过滤', async () => {
     const store = new LanceDBStore(tmpDir);

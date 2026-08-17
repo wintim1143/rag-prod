@@ -1,7 +1,7 @@
 # 项目进度（PROGRESS）
 
-> 更新时间：2026-08-14
-> 自动化验证基线：`npm run typecheck` + `npm test`（105 用例，覆盖率门槛 ≥80%）
+> 更新时间：2026-08-17
+> 自动化验证基线：`npm run typecheck` + `npm test`（128 用例，覆盖率门槛 ≥80%）
 > 本文件记录：**已完成什么 / 可人工验证什么 / 依赖 LLM 什么**。切片明细见 `docs/tickets/`，路线图见 CLAUDE.md。
 
 ## 当前状态速览
@@ -14,7 +14,7 @@
 | 04 问答/聊天（/ask /chat） | done ✅ | **是 — 云 chat LLM**（已配 opencode `deepseek-v4-flash`） |
 | 05 知识库管理 API | done ✅ | 无 |
 | 06 评估体系（LLM 判分 + 回归） | done ✅ | **是 — 云 chat LLM 判分**（judge 用同一 chat provider） |
-| 07 检索诊断 | **frontier（未开工）** | 无 |
+| 07 检索诊断 | done ✅ | 无 |
 
 ## 已完成工作
 
@@ -66,13 +66,15 @@
 - **实测**（3 样本 + 真实 judge）：baseline k3 → faithfulness 1.0 / relevance 1.0 / precision 0.2 / recall 1.0；k1 变体全面下滑，回归运行器正确报 k1 回归（faithfulness/relevance/recall）。context_precision 偏低符合预期（ms-marco 对中文区分弱）。
 - **LLM 依赖**：是 —— judge 用同一云 chat LLM（`config.llm`）。离线测试用桩 provider（`tests/eval/*`，含 CI 冒烟子集）。
 
+### 07 检索诊断（done ✅）
+
+- **完成**：`SearchPipeline.trace()` 暴露 query 向量化维度、向量命中、BM25 命中、RRF 融合、重排候选及 top-k 的完整分数与来源；新增 `POST /trace`（强制租户过滤）和 `npm run diagnose -- "<query>"` CLI。
+- **失败分类**：纯函数分类器输出 a–d 之一并附证据：知识库无内容、内容存在但未召回、召回后排在 top-k 之外、检索正常但问题转移到生成层；支持 `expected` chunkId 做精确召回/排名诊断，并提供无 expected 的启发式判断。
+- **报告导出**：CLI 将完整 trace JSON 写入 `trace-results/trace-<timestamp>.json`，stdout 同时输出可读摘要与各环节 top 命中。
+- **测试与验证**：覆盖空库、无命中、表达不匹配、召回后排太后、检索正常、租户过滤、端点参数传递和报告渲染；`npm run diagnose -- "Fastify 端口"` 已用真实本地 LanceDB/Embedding/Reranker 冒烟通过。
+- **LLM 依赖**：无。
+
 ## 待办（frontier）
-
-### 07 检索诊断（单 query trace + 失败分类）
-
-- 内容：对单次检索输出各环节 trace（向量/BM25/RRF/重排分数 + 命中来源）与失败分类，定位检索问题。
-- Blocked by：03（已满足）。
-- LLM 依赖：无。
 
 ## LLM 依赖矩阵
 
@@ -85,6 +87,7 @@
 | 问答生成（04） | **是 — 云 chat LLM** | 需 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` |
 | 知识库管理 / 租户过滤（05） | 否 | 纯本地 |
 | 评估判分（06） | **是 — 云 chat LLM judge** | 复用 `config.llm`；离线测试用桩 |
+| 检索诊断（07） | 否 | trace、失败分类与报告导出全部本地 |
 
 ## 人工验证清单（从零复现）
 

@@ -12,7 +12,8 @@ import { KnowledgeServiceImpl, type KnowledgeService } from '../knowledge/servic
 import { buildKnowledgeRoutes } from '../knowledge/routes/documents.js';
 import { LocalReranker } from '../retrieval/reranker.js';
 import { buildSearchRoutes } from '../retrieval/routes/search.js';
-import { SearchPipeline, type SearchService } from '../retrieval/search.js';
+import { buildTraceRoutes } from '../retrieval/routes/trace.js';
+import { SearchPipeline, type SearchService, type TraceService } from '../retrieval/search.js';
 import { buildHealthRoutes } from './routes/health.js';
 
 export interface BuildAppOptions {
@@ -23,6 +24,7 @@ export interface BuildAppOptions {
   services?: {
     ingest?: IngestService;
     search?: SearchService;
+    trace?: TraceService;
     answer?: AnswerService;
     knowledge?: KnowledgeService;
   };
@@ -41,14 +43,15 @@ export function buildApp({
   });
 
   // search 与 answer 共享同一 search 实例（answer 复用检索管线）
-  const search =
-    services.search ??
+  const search = (services.search ??
     new SearchPipeline(config, {
       embedder: createEmbedder(config),
       store: new LanceDBStore(config.lance.dbPath),
       reranker: new LocalReranker(config.reranker.model),
-    });
+    })) as SearchService & TraceService;
   app.register(buildSearchRoutes, { search, config });
+  // trace 与 search 共享同一管线实例（SearchPipeline 同时实现 SearchService 与 TraceService）
+  app.register(buildTraceRoutes, { trace: services.trace ?? search, config });
   const answer = services.answer ?? new AnswerPipeline(search, createChatProvider(config));
   app.register(buildAskRoutes, { answer });
   app.register(buildChatRoutes, { answer });
