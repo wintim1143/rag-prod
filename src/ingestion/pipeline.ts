@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Config } from '../config/index.js';
@@ -27,7 +28,8 @@ export interface IngestOutcome {
 
 /** HTTP 层可注入的摄入服务抽象（测试注入 stub）。 */
 export interface IngestService {
-  ingestPath(inputPath: string): Promise<IngestOutcome>;
+  /** tenant 缺省落到配置默认租户；写入路径透传租户以支持多租户摄入（C1/W3）。 */
+  ingestPath(inputPath: string, tenant?: string): Promise<IngestOutcome>;
 }
 
 export interface IngestDeps {
@@ -50,7 +52,8 @@ async function resolveInputFiles(inputPath: string): Promise<string[]> {
     const entries = await fs.readdir(inputPath, { withFileTypes: true, recursive: true });
     return entries
       .filter((entry) => entry.isFile())
-      .map((entry) => path.join(inputPath, entry.name))
+      // 递归 readdir 的 entry.name 仅 basename，需用 entry.parentPath 还原完整路径（W1）
+      .map((entry) => path.join(entry.parentPath ?? inputPath, entry.name))
       .filter((file) => SUPPORTED_EXTENSIONS.includes(path.extname(file).toLowerCase()))
       .sort();
   }
@@ -64,7 +67,7 @@ export class IngestPipeline implements IngestService {
     private readonly deps: IngestDeps,
   ) {}
 
-  async ingestPath(inputPath: string): Promise<IngestOutcome> {
+  async ingestPath(inputPath: string, tenant: string = this.config.tenant.default): Promise<IngestOutcome> {
     let files: string[];
     try {
       files = await resolveInputFiles(inputPath);
@@ -85,7 +88,7 @@ export class IngestPipeline implements IngestService {
         const doc = await loadDocument({ buffer, sourcePath: file });
         const chunks = await splitDocument(doc, this.config.chunking);
         const vectors = await this.deps.embedder.embedTexts(chunks.map((c) => c.text));
-        const records = this.buildRecords(doc, chunks, vectors);
+        const records = this.buildRecords(doc, chunks, vectors, tenant);
         const docId = computeDocId(file);
         const chunkCount = await this.deps.store.upsertChunks(docId, records);
         ingested.push({ docId, sourcePath: file, chunkCount });      } catch (err) {
@@ -99,6 +102,7 @@ export class IngestPipeline implements IngestService {
     doc: LoadedDocument,
     chunks: DocumentChunk[],
     vectors: number[][],
+    tenant: string,
   ): ChunkRecord[] {
     const docId = computeDocId(doc.metadata.sourcePath);
     return chunks.map((chunk, i) => ({
@@ -111,20 +115,29 @@ export class IngestPipeline implements IngestService {
       sourcePath: chunk.metadata.sourcePath,
       sectionPath: chunk.metadata.sectionPath.join(' > '),
       uploadedAt: doc.metadata.uploadedAt,
-      tenant: this.config.tenant.default,
+      tenant,
     }));
   }
 
-  /** 若配置了 INGEST_ROOT，拒绝读取该目录之外的路径。 */
+  /** 若配置了 INGEST_ROOT，拒绝读取该目录之外的路径（跟随软链比较真实路径，防逃逸 W5）。 */
   private assertWithinRoot(file: string): void {
     const root = this.config.ingest.root;
     if (!root) {
       return;
     }
-    const rel = path.relative(path.resolve(root), path.resolve(file));
+    const rel = path.relative(resolveReal(root), resolveReal(file));
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
       throw new Error(`路径超出允许的摄入根目录: ${file}`);
     }
+  }
+}
+
+/** 解析真实路径；软链跟随；解析失败（如不存在）回落到字符串归一化，避免断言时崩溃。 */
+function resolveReal(p: string): string {
+    try {
+      return realpathSync(p);
+  } catch {
+    return path.resolve(p);
   }
 }
 

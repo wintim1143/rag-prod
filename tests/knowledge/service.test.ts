@@ -85,7 +85,8 @@ describe('KnowledgeService — 文档生命周期', () => {
 
     const result = await service.reindexDocument(docId, { tenant: 'default' });
     expect(result).toEqual({ docId, chunkCount: 7 });
-    expect(ingest.ingestPath).toHaveBeenCalledWith(file);
+    // reindex 必须把定位时用的租户透传给摄入，避免跨租户漂移（C1）
+    expect(ingest.ingestPath).toHaveBeenCalledWith(file, 'default');
   });
 
   it('reindexDocument 对不存在的 docId 抛错', async () => {

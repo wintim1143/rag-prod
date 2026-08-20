@@ -41,6 +41,7 @@ export function buildApp({
   app.register(buildHealthRoutes, { config });
   app.register(buildIngestRoutes, {
     ingest: services.ingest ?? new IngestPipeline(config, createIngestDeps(config)),
+    config,
   });
 
   // search 与 answer 共享同一 search 实例（answer 复用检索管线）

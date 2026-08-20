@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { SearchService } from '../retrieval/search.js';
 import type { AnswerService } from '../generation/service.js';
 import type { ChatProvider } from '../generation/types.js';
@@ -33,7 +34,7 @@ export async function runVariant(options: RunVariantOptions): Promise<VariantEva
     const hitSet = new Set<string>();
     let firstRank: number | null = null;
     for (let i = 0; i < retrievedSources.length; i += 1) {
-      if (expected.includes(retrievedSources[i] as string)) {
+      if (sourceMatches(retrievedSources[i] as string, expected)) {
         hitSet.add(retrievedSources[i] as string);
         if (firstRank === null) firstRank = i + 1;
       }
@@ -59,7 +60,8 @@ export async function runVariant(options: RunVariantOptions): Promise<VariantEva
         expected: expected.length,
         recallAtK: expected.length > 0 ? hitSet.size / expected.length : null,
         mrr: firstRank === null ? null : 1 / firstRank,
-        queryCount: answerResult.stages.retrievalN > 0 ? 1 : 0,
+        // 真实查询数：多查询/HyDE 会 >1；回落到 1 保持兼容（S3）
+        queryCount: answerResult.stages.queryCount ?? (answerResult.stages.retrievalN > 0 ? 1 : 0),
         llmCalls: answerResult.stages.optimizationLlmCalls ?? 0,
         optimizationLatencyMs,
         searchLatencyMs,
@@ -134,4 +136,15 @@ export function compareVariants(
     }
   }
   return regressions;
+}
+
+/**
+ * sourcePath 是否命中期望来源集合（S4）。
+ * 先按归一化路径精确匹配；再按 leaf（basename）匹配，兼容摄入用绝对/不同相对路径的情形。
+ */
+function sourceMatches(retrieved: string, expected: string[]): boolean {
+  const norm = path.normalize(retrieved);
+  if (expected.map((e) => path.normalize(e)).includes(norm)) return true;
+  const leaf = path.basename(norm);
+  return expected.map((e) => path.basename(path.normalize(e))).includes(leaf);
 }

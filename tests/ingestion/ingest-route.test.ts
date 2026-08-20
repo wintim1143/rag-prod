@@ -39,7 +39,8 @@ describe('POST /ingest', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().ingested[0].chunkCount).toBe(3);
-    expect(ingest.ingestPath).toHaveBeenCalledWith('x.md');
+    // 摄入路径透传租户（缺省默认），与多租户写入链路一致（W3）
+    expect(ingest.ingestPath).toHaveBeenCalledWith('x.md', 'default');
   });
 
   it('body 缺 path 返回 400', async () => {

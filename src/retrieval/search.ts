@@ -79,6 +79,7 @@ export class SearchPipeline implements SearchService, TraceService {
       stages: {
         retrievalN: stages.n,
         topK: stages.k,
+        queryCount: stages.queryResults?.length ?? 0,
         reranker: stages.reranked.status,
         fallbackReason: stages.reranked.reason,
         optimizationLlmCalls: stages.optimization?.llmCalls,

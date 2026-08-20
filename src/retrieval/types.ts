@@ -57,6 +57,8 @@ export interface SearchResponse {
   stages: {
     retrievalN: number;
     topK: number;
+    /** 实际发起的检索查询条数（多查询/HyDE 会 >1，评估用，S3）。 */
+    queryCount: number;
     /** 重排方式：cross-encoder 正常 / fallback 降级到启发式。 */
     reranker: 'cross-encoder' | 'fallback';
     fallbackReason?: string;

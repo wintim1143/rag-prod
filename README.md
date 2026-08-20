@@ -59,10 +59,10 @@ npm run typecheck             # tsc --noEmit
 | `PORT` | 服务端口 | `3000` |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | 分块大小 / 重叠 | `800` / `100` |
 | `RETRIEVAL_N` / `RETRIEVAL_K` | 粗筛候选数 / 精排后 top-k | `50` / `5` |
-| `HYBRID` | 混合检索（向量 + BM25 + RRF）固定开启 | `true` |
+| `HYBRID` | **已废弃**：混合检索（向量 + BM25 + RRF）在代码内固定开启，该变量不生效 | 不读取 |
 | `QUERY_REWRITE` / `MULTI_QUERY` / `HYDE` | 查询优化开关（08） | `false` |
 | `CHAT_MODE` | 聊天模式：`fixed` / `agentic` | `fixed` |
-| `CHAT_STREAM` | `/chat` 是否以 SSE 流式返回 | `true` |
+| `CHAT_STREAM` | `/chat` 是否以 SSE 流式返回（仅由该开关决定，不再要求 `accept` 头） | `false` |
 | `AGENT_MAX_STEPS` / `AGENT_TIMEOUT_MS` | Agent 资源限制 | `3` / `30000` |
 | `EVAL_MAX_SAMPLES` | 评估最多跑多少条样本（`npm run eval`，冒烟用） | 全量 |
 

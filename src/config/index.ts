@@ -49,7 +49,11 @@ function optionalUrl() {
 /** 整数环境变量（空串视为未设置）。 */
 function boolEnv(label: string, fallback: boolean) {
   return z.preprocess(
-    emptyToUndefined,
+    // 大小写不敏感：TRUE/FALSE 也接受（S6）
+    (value: unknown) => {
+      const e = emptyToUndefined(value);
+      return typeof e === 'string' ? e.toLowerCase() : e;
+    },
     z
       .enum(['true', 'false'], { invalid_type_error: `${label} 必须是 true 或 false` })
       .transform((value) => value === 'true')

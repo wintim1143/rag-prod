@@ -31,11 +31,16 @@ export class LocalReranker implements Reranker {
   private readonly modelId: string;
   private state: 'idle' | 'ready' | 'failed' = 'idle';
   private lastError?: string;
+  /** 上次失败时间，用于冷却后退避重试（避免单次瞬时失败永久降级，W6）。 */
+  private failedAt?: number;
+  /** 失败后重试冷却（ms）。冷却内复用启发式兜底；冷却后才重新加载模型。 */
+  private readonly cooldownMs: number;
   private tokenizerPromise?: ReturnType<typeof AutoTokenizer.from_pretrained>;
   private modelPromise?: ReturnType<typeof AutoModelForSequenceClassification.from_pretrained>;
 
   constructor(modelId: string = DEFAULT_MODEL) {
     this.modelId = modelId;
+    this.cooldownMs = 30_000;
     // 支持 HF_ENDPOINT 切换模型下载源（与 LocalEmbedder 一致）
     const remoteHost = process.env.HF_ENDPOINT;
     if (remoteHost) {
@@ -44,28 +49,38 @@ export class LocalReranker implements Reranker {
   }
 
   async rerank(query: string, candidates: SearchCandidate[]): Promise<RerankResult> {
-    if (this.state !== 'failed') {
-      try {
-        const [tokenizer, model] = await this.ensureLoaded();
-        const pairs = candidates.map((c) => [query, c.text.slice(0, MAX_PASSAGE_LENGTH)]);
-        const inputs = await tokenizer(pairs as never, { padding: true, truncation: true });
-        const output = await model(inputs);
-        const logits = output.logits.tolist() as number[][];
-        candidates.forEach((c, i) => {
-          const raw = logits[i]?.[0];
-          c.rerank = raw === undefined ? null : sigmoid(raw);
-        });
-        candidates.sort((a, b) => (b.rerank ?? 0) - (a.rerank ?? 0));
-        this.state = 'ready';
-        return { candidates, status: 'cross-encoder' };
-      } catch (err) {
-        this.state = 'failed';
-        this.lastError = errorMessage(err);
-        return this.fallback(query, candidates, this.lastError);
-      }
+    // 已失败但仍在冷却期内：复用启发式兜底，保留首次失败原因供 /search 展示（W6）
+    if (this.state === 'failed' && !this.cooldownElapsed()) {
+      return this.fallback(query, candidates, this.lastError);
     }
-    // 已失败：持续降级，并保留首次失败原因供 /search 展示
-    return this.fallback(query, candidates, this.lastError);
+    try {
+      const [tokenizer, model] = await this.ensureLoaded();
+      const pairs = candidates.map((c) => [query, c.text.slice(0, MAX_PASSAGE_LENGTH)]);
+      const inputs = await tokenizer(pairs as never, { padding: true, truncation: true });
+      const output = await model(inputs);
+      const logits = output.logits.tolist() as number[][];
+      candidates.forEach((c, i) => {
+        const raw = logits[i]?.[0];
+        c.rerank = raw === undefined ? null : sigmoid(raw);
+      });
+      candidates.sort((a, b) => (b.rerank ?? 0) - (a.rerank ?? 0));
+      this.state = 'ready';
+      this.failedAt = undefined;
+      return { candidates, status: 'cross-encoder' };
+    } catch (err) {
+      this.state = 'failed';
+      this.lastError = errorMessage(err);
+      this.failedAt = Date.now();
+      // 不要缓存被 reject 的 promise，冷却后才可重新加载，避免瞬时失败永久降级（W6）
+      this.tokenizerPromise = undefined;
+      this.modelPromise = undefined;
+      return this.fallback(query, candidates, this.lastError);
+    }
+  }
+
+  private cooldownElapsed(): boolean {
+    if (this.failedAt === undefined) return true;
+    return Date.now() - this.failedAt >= this.cooldownMs;
   }
 
   private async ensureLoaded() {

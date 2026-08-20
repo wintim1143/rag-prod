@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { loadConfig } from '../config/index.js';
+import { loadConfig, type Config } from '../config/index.js';
 import { createChatProvider } from '../generation/llm.js';
 import { AnswerPipeline } from '../generation/service.js';
 import { LocalEmbedder } from '../ingestion/embedder.js';
@@ -26,7 +26,16 @@ async function main() {
   const judge = createChatProvider(config);
 
   function makeSearch(k: number, opts?: { rewrite?: boolean; multiQuery?: boolean; hyde?: boolean }) {
-    const search = new SearchPipeline(config, {
+    // 用变体开关覆盖全局 queryOptimization，使各变体真正跑不同检索策略（W2）
+    const variantConfig: Config = {
+      ...config,
+      queryOptimization: {
+        rewrite: opts?.rewrite ?? false,
+        multiQuery: opts?.multiQuery ?? false,
+        hyde: opts?.hyde ?? false,
+      },
+    };
+    const search = new SearchPipeline(variantConfig, {
       embedder,
       store,
       reranker,
@@ -36,7 +45,6 @@ async function main() {
       search,
       answer: new AnswerPipeline(search, judge),
       k,
-      overrides: { rewrite: opts?.rewrite ?? false, multiQuery: opts?.multiQuery ?? false, hyde: opts?.hyde ?? false },
     };
   }
 
@@ -55,7 +63,7 @@ async function main() {
 
   const baselineVariant = variants[0];
   if (!baselineVariant) throw new Error('缺少基线变体');
-  const baselineStub = makeSearch(baselineVariant.k);
+  const baselineStub = makeSearch(baselineVariant.k, baselineVariant.opts);
   const baseline = await runVariant({
     name: baselineVariant.name,
     dataset,
@@ -67,7 +75,7 @@ async function main() {
 
   const others: Awaited<ReturnType<typeof runVariant>>[] = [];
   for (const v of variants.slice(1)) {
-    const stub = makeSearch(v.k);
+    const stub = makeSearch(v.k, v.opts);
     others.push(
       await runVariant({
         name: v.name,

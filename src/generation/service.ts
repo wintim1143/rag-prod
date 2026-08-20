@@ -72,6 +72,8 @@ export class AnswerPipeline implements AnswerService {
     ];
     if (!this.provider.stream) {
       const result = await this.generate(resp, messages.slice(0, -1), this.buildUserPrompt(query, resp.results), options.signal);
+      // 非流式 provider 分支也先发 sources，保持 SSE 契约一致（S5）
+      yield { type: 'sources', chunks: resp.results };
       yield { type: 'text_delta', text: result.answer };
       yield { type: 'done', result };
       return;
@@ -114,22 +116,16 @@ export class AnswerPipeline implements AnswerService {
           { role: 'user', content: `检索工具已返回 ${resp.results.length} 条资料。若已有足够资料请直接回答；若不足请继续检索，或回答「检索完成」。` },
         ];
       }
-      const seen = new Set<string>();
-      const results = consulted.filter((r) => (seen.has(r.chunkId) ? false : (seen.add(r.chunkId), true)));
-      if (results.length === 0) {
-        const resp = lastResp ?? emptyResponse(query);
-        const result = this.noMaterial(resp);
+      const plan = this.collectPlan(lastResp, consulted, query);
+      if (plan.results.length === 0) {
+        const result = this.noMaterial(plan.resp);
         yield { type: 'done', result };
         return;
       }
-      const finalQuery = lastResp?.query ?? query;
-      const resp: SearchResponse = {
-        ...(lastResp ?? emptyResponse(query)),
-        query: finalQuery,
-        results,
-      };
       if (!this.provider.stream) {
-        const result = await this.generate(resp, history, this.buildUserPrompt(finalQuery, results), merged.signal);
+        // 非流式 provider：仍先发 sources 事件，保持 SSE 契约一致（S5）
+        const result = await this.generate(plan.resp, history, this.buildUserPrompt(query, plan.results), merged.signal);
+        yield { type: 'sources', chunks: plan.results };
         yield { type: 'text_delta', text: result.answer };
         yield { type: 'done', result };
         return;
@@ -137,16 +133,65 @@ export class AnswerPipeline implements AnswerService {
       const promptMessages: ChatMessage[] = [
         { role: 'system', content: buildSystemPrompt() },
         ...history,
-        { role: 'user', content: this.buildUserPrompt(finalQuery, results) },
+        { role: 'user', content: this.buildUserPrompt(query, plan.results) },
       ];
       let answer = '';
       for await (const text of this.provider.stream(promptMessages, merged.signal)) {
         answer += text;
         yield { type: 'text_delta', text };
       }
-      const result = this.toResult(resp, answer);
-      yield { type: 'sources', chunks: results };
+      const result = this.toResult(plan.resp, answer);
+      yield { type: 'sources', chunks: plan.results };
       yield { type: 'done', result };
+    } finally {
+      merged.cleanup();
+    }
+  }
+
+  /**
+   * 去重合并 agentic 检索到的块，并构建最终 SearchResponse。
+   * 关键：最终问题用用户的（改写后）query，而非 planner 生成的检索子查询（W4）。
+   */
+  private collectPlan(lastResp: SearchResponse | null, consulted: SearchResult[], query: string): {
+    resp: SearchResponse;
+    results: SearchResult[];
+  } {
+    const seen = new Set<string>();
+    const results = consulted.filter((r) => (seen.has(r.chunkId) ? false : (seen.add(r.chunkId), true)));
+    const resp: SearchResponse = {
+      ...(lastResp ?? emptyResponse(query)),
+      query,
+      results,
+    };
+    return { resp, results };
+  }
+
+  /** 运行 agentic planner（非流式）：循环检索直到 no_search 或达步数上限，返回去重结果与最终响应。供 chat() 复用（S1）。 */
+  private async planAgentic(
+    messages: ChatMessage[],
+    options: { k?: number; signal?: AbortSignal; filter?: ChunkFilter },
+    query: string,
+  ): Promise<{ resp: SearchResponse; results: SearchResult[] }> {
+    const maxSteps = this.config?.chat.maxSteps ?? 3;
+    const timeoutMs = this.config?.chat.timeoutMs ?? 30000;
+    const merged = mergeSignals(options.signal, timeoutMs);
+    const consulted: SearchResult[] = [];
+    let lastResp: SearchResponse | null = null;
+    try {
+      let working = [...messages];
+      for (let step = 1; step <= maxSteps; step += 1) {
+        throwIfAborted(merged.signal);
+        const decision = await this.provider.chooseToolQuery!(working, merged.signal);
+        if (decision.type === 'no_search') break;
+        const resp = await this.search.search(decision.query, { k: options.k, filter: options.filter, signal: merged.signal });
+        lastResp = resp;
+        consulted.push(...resp.results);
+        working = [
+          ...working,
+          { role: 'user', content: `检索工具已返回 ${resp.results.length} 条资料。若已有足够资料请直接回答；若不足请继续检索，或回答「检索完成」。` },
+        ];
+      }
+      return this.collectPlan(lastResp, consulted, query);
     } finally {
       merged.cleanup();
     }
@@ -157,23 +202,24 @@ export class AnswerPipeline implements AnswerService {
     if (!query) {
       throw new Error('历史中没有 user 消息');
     }
-    const resp = await this.search.search(query, { k: options.k, filter: options.tenant ? { tenant: options.tenant } : undefined });
+    const filter = options.tenant ? { tenant: options.tenant } : undefined;
+    // agentic 模式在非流式 JSON 回退下也走 planner，收集资料后汇聚为单条回答（S1）
+    const agentic = this.config?.chat.mode === 'agentic' && !!this.provider.chooseToolQuery;
+    if (agentic) {
+      const plan = await this.planAgentic(messages, { ...options, filter }, query);
+      if (plan.results.length === 0) {
+        return this.noMaterial(plan.resp);
+      }
+      const history = messages.slice(0, -1);
+      return this.generate(plan.resp, history, this.buildUserPrompt(query, plan.results));
+    }
+    const resp = await this.search.search(query, { k: options.k, filter });
     if (resp.results.length === 0) {
       return this.noMaterial(resp);
     }
     // 历史透传给 LLM 保持多轮上下文；最后一条 user 消息由改写 query 代表，不再重复传原始文本
     const history = messages.slice(0, -1);
     return this.generate(resp, history, this.buildUserPrompt(query, resp.results));
-  }
-
-  private generateWithoutSearch(messages: ChatMessage[], signal?: AbortSignal): Promise<AnswerResult> {
-    return this.provider.generate(messages, signal).then((answer) => ({
-      query: rewriteQuery(messages) ?? '',
-      answer,
-      citations: [],
-      chunks: [],
-      stages: { retrievalN: 0, topK: 0, reranker: 'fallback' as const },
-    }));
   }
 
   /** 组装最终发给 LLM 的消息序列：system + 历史 + user（含编号资料）。 */
@@ -255,5 +301,5 @@ function throwIfAborted(signal: AbortSignal): void {
 }
 
 function emptyResponse(query: string): SearchResponse {
-  return { query, results: [], stages: { retrievalN: 0, topK: 0, reranker: 'fallback' } };
+  return { query, results: [], stages: { retrievalN: 0, topK: 0, queryCount: 0, reranker: 'fallback' } };
 }

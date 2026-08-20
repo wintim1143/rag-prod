@@ -3,6 +3,13 @@ import type { IngestService } from '../pipeline.js';
 
 export interface IngestRoutesOptions {
   ingest: IngestService;
+  config?: import('../../config/index.js').Config;
+}
+
+/** 与知识库路由保持一致的租户解析（缺省回落默认租户）。 */
+function resolveTenant(header: string | string[] | undefined, fallback: string): string {
+  const value = Array.isArray(header) ? header[0] : header;
+  return value?.trim() || fallback;
 }
 
 /**
@@ -25,7 +32,8 @@ export const buildIngestRoutes: FastifyPluginAsync<IngestRoutesOptions> = async 
     },
     async (request, reply) => {
       const { path: inputPath } = request.body as { path: string };
-      const outcome = await opts.ingest.ingestPath(inputPath);
+      const tenant = resolveTenant(request.headers['x-tenant'], opts.config?.tenant.default ?? 'default');
+      const outcome = await opts.ingest.ingestPath(inputPath, tenant);
       return reply.code(200).send(outcome);
     },
   );

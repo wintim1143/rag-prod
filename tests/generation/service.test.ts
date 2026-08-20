@@ -19,7 +19,7 @@ function searchResponse(results: SearchResult[], query = 'q'): SearchResponse {
   return {
     query,
     results,
-    stages: { retrievalN: 50, topK: 5, reranker: 'cross-encoder' },
+    stages: { retrievalN: 50, topK: 5, queryCount: 1, reranker: 'cross-encoder' },
   };
 }
 

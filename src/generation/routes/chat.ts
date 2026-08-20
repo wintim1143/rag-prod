@@ -38,7 +38,8 @@ export const buildChatRoutes: FastifyPluginAsync<ChatRoutesOptions> = async (app
     async (request, reply) => {
       const { messages, k } = request.body as { messages: ChatMessage[]; k?: number };
       const tenant = resolveTenant(request.headers['x-tenant'], opts.config?.tenant.default ?? 'default');
-      if (!opts.answer.streamChat || opts.config?.chat.stream === false || !request.headers.accept?.includes('text/event-stream')) {
+      // SSE 仅由 CHAT_STREAM 决定；不再额外要求 accept: text/event-stream（S2）
+      if (!opts.answer.streamChat || opts.config?.chat.stream === false) {
         const result = await opts.answer.chat(messages, { k, tenant });
         return reply.code(200).send(result);
       }

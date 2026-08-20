@@ -55,7 +55,7 @@ export class KnowledgeServiceImpl implements KnowledgeService {
     if (!meta) {
       throw new Error(`文档不存在: ${docId}`);
     }
-    const outcome = await this.deps.ingest.ingestPath(meta.sourcePath);
+    const outcome = await this.deps.ingest.ingestPath(meta.sourcePath, filter.tenant);
     const ingested = outcome.ingested.find((i) => i.docId === docId);
     if (!ingested) {
       const failed = outcome.failed[0];
