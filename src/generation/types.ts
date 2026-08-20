@@ -6,9 +6,16 @@ export interface ChatMessage {
   content: string;
 }
 
+export type ToolDecision =
+  | { type: 'search'; query: string }
+  | { type: 'no_search' };
+
 /** LLM 提供者抽象：输入角色化消息，返回回答文本（测试注入桩）。 */
 export interface ChatProvider {
-  generate(messages: ChatMessage[]): Promise<string>;
+  generate(messages: ChatMessage[], signal?: AbortSignal): Promise<string>;
+  stream?(messages: ChatMessage[], signal?: AbortSignal): AsyncIterable<string>;
+  /** Agentic 模式的结构化检索决策。 */
+  chooseToolQuery?(messages: ChatMessage[], signal?: AbortSignal): Promise<ToolDecision>;
 }
 
 /** 回答中的一条引用（[n] → 来源块）。 */
@@ -32,3 +39,11 @@ export interface AnswerResult {
   chunks: SearchResult[];
   stages: SearchResponse['stages'];
 }
+
+export type ChatStreamEvent =
+  | { type: 'text_delta'; text: string }
+  | { type: 'tool_start'; step: number; query: string }
+  | { type: 'tool_result'; step: number; query: string; resultCount: number }
+  | { type: 'sources'; chunks: SearchResult[] }
+  | { type: 'done'; result: AnswerResult }
+  | { type: 'error'; code: 'ABORTED' | 'TIMEOUT' | 'PROVIDER_ERROR' | 'TOOL_ERROR'; message: string };

@@ -26,7 +26,7 @@ function searchResponse(results: SearchResult[], query = 'q'): SearchResponse {
 /** 桩 search：记录 query，返回固定结果（query 回显传入值，模拟真实 SearchPipeline）。 */
 function stubSearch(results: SearchResult[]) {
   return {
-    search: vi.fn(async (_query: string) => searchResponse(results, _query)),
+    search: vi.fn(async (_query: string, _opts?: unknown) => searchResponse(results, _query)),
   };
 }
 

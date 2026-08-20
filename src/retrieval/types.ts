@@ -17,6 +17,15 @@ export interface SearchCandidate {
   rrf: number;
   /** cross-encoder 重排分（兜底时为启发式分）。 */
   rerank: number | null;
+  /** 该候选在多查询融合中的来源。 */
+  provenance?: QueryProvenance[];
+}
+
+export interface QueryProvenance {
+  query: string;
+  queryIndex: number;
+  lane: 'vector' | 'bm25';
+  rank: number;
 }
 
 export interface SearchResult {
@@ -37,12 +46,24 @@ export interface SearchResult {
 export interface SearchResponse {
   query: string;
   results: SearchResult[];
+  optimization?: {
+    originalQuery: string;
+    queries: string[];
+    strategies: string[];
+    llmCalls: number;
+    latencyMs: number;
+    failures?: Array<{ strategy: string; message: string }>;
+  };
   stages: {
     retrievalN: number;
     topK: number;
     /** 重排方式：cross-encoder 正常 / fallback 降级到启发式。 */
     reranker: 'cross-encoder' | 'fallback';
     fallbackReason?: string;
+    /** 查询优化 LLM 调用次数（评估用）。 */
+    optimizationLlmCalls?: number;
+    /** 查询优化耗时 ms（评估用）。 */
+    optimizationLatencyMs?: number;
   };
 }
 

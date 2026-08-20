@@ -47,6 +47,16 @@ function optionalUrl() {
 }
 
 /** 整数环境变量（空串视为未设置）。 */
+function boolEnv(label: string, fallback: boolean) {
+  return z.preprocess(
+    emptyToUndefined,
+    z
+      .enum(['true', 'false'], { invalid_type_error: `${label} 必须是 true 或 false` })
+      .transform((value) => value === 'true')
+      .default(String(fallback) as 'true' | 'false'),
+  );
+}
+
 function intEnv(
   label: string,
   bounds: { min?: number; max?: number; positive?: boolean } = {},
@@ -108,6 +118,17 @@ const envSchema = z.object({
 
   // ---- 租户（05 生效）：摄入时给块打的默认租户标记，检索 API 强制过滤 ----
   DEFAULT_TENANT: requiredStringWithDefault('DEFAULT_TENANT', 'default'),
+
+  // ---- 查询优化（08）----
+  QUERY_REWRITE: boolEnv('QUERY_REWRITE', false),
+  MULTI_QUERY: boolEnv('MULTI_QUERY', false),
+  HYDE: boolEnv('HYDE', false),
+
+  // ---- Chat（09）----
+  CHAT_MODE: z.preprocess(emptyToUndefined, z.enum(['fixed', 'agentic'])).default('fixed'),
+  CHAT_STREAM: boolEnv('CHAT_STREAM', false),
+  AGENT_MAX_STEPS: intEnv('AGENT_MAX_STEPS', { min: 1, max: 10 }).default(3),
+  AGENT_TIMEOUT_MS: intEnv('AGENT_TIMEOUT_MS', { min: 1000, max: 120000 }).default(30000),
 
   // ---- HTTP 服务 ----
   PORT: intEnv('PORT', { min: 1, max: 65535 }).default(3000),
@@ -181,6 +202,17 @@ export interface Config {
     /** 重排后返回的 top-k。 */
     k: number;
   };
+  queryOptimization: {
+    rewrite: boolean;
+    multiQuery: boolean;
+    hyde: boolean;
+  };
+  chat: {
+    mode: 'fixed' | 'agentic';
+    stream: boolean;
+    maxSteps: number;
+    timeoutMs: number;
+  };
   server: {
     port: number;
     env: 'development' | 'test' | 'production';
@@ -233,6 +265,17 @@ export function resolveConfig(raw: RawConfig): Config {
     retrieval: {
       n: raw.RETRIEVAL_N,
       k: raw.RETRIEVAL_K,
+    },
+    queryOptimization: {
+      rewrite: raw.QUERY_REWRITE,
+      multiQuery: raw.MULTI_QUERY,
+      hyde: raw.HYDE,
+    },
+    chat: {
+      mode: raw.CHAT_MODE,
+      stream: raw.CHAT_STREAM,
+      maxSteps: raw.AGENT_MAX_STEPS,
+      timeoutMs: raw.AGENT_TIMEOUT_MS,
     },
     server: {
       port: raw.PORT,

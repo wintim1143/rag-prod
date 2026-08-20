@@ -55,7 +55,7 @@ describe('POST /ask', () => {
     const body = res.json();
     expect(body.answer).toContain('[1]');
     expect(body.citations[0].chunkId).toBe('c1');
-    expect(answerStub.ask).toHaveBeenCalledWith('Fastify 端口？', { k: 3 });
+    expect(answerStub.ask).toHaveBeenCalledWith('Fastify 端口？', { k: 3, tenant: 'default' });
   });
 
   it('缺 query 返回 400', async () => {
@@ -90,7 +90,7 @@ describe('POST /chat', () => {
         { role: 'assistant', content: 'Fastify 是……' },
         { role: 'user', content: '那端口呢？' },
       ],
-      { k: 2 },
+      { k: 2, tenant: 'default' },
     );
   });
 

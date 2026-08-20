@@ -14,14 +14,31 @@ export interface RunVariantOptions {
   judge: ChatProvider;
   /** 检索 top-k（传入 answer.ask）。 */
   k?: number;
+  /** 评测租户（默认 fallback），传给 answer.ask。 */
+  tenant?: string;
 }
 
 /** 用一个配置变体跑整个评测集：检索 → 生成 → 四指标判分 → 聚合。 */
 export async function runVariant(options: RunVariantOptions): Promise<VariantEval> {
   const samples: SampleEval[] = [];
   for (const sample of options.dataset) {
-    const answerResult = await options.answer.ask(sample.question, { k: options.k });
+    const started = performance.now();
+    const answerResult = await options.answer.ask(sample.question, {
+      k: options.k,
+      tenant: options.tenant,
+    });
+    const searchLatencyMs = performance.now() - started;
     const retrievedSources = answerResult.chunks.map((c) => c.sourcePath);
+    const expected = sample.expectedSources;
+    const hitSet = new Set<string>();
+    let firstRank: number | null = null;
+    for (let i = 0; i < retrievedSources.length; i += 1) {
+      if (expected.includes(retrievedSources[i] as string)) {
+        hitSet.add(retrievedSources[i] as string);
+        if (firstRank === null) firstRank = i + 1;
+      }
+    }
+    const optimizationLatencyMs = answerResult.stages.optimizationLatencyMs ?? 0;
     const results = await evaluateSample(
       {
         question: sample.question,
@@ -37,6 +54,16 @@ export async function runVariant(options: RunVariantOptions): Promise<VariantEva
       question: sample.question,
       retrievedSources,
       results,
+      retrieval: {
+        hits: hitSet.size,
+        expected: expected.length,
+        recallAtK: expected.length > 0 ? hitSet.size / expected.length : null,
+        mrr: firstRank === null ? null : 1 / firstRank,
+        queryCount: answerResult.stages.retrievalN > 0 ? 1 : 0,
+        llmCalls: answerResult.stages.optimizationLlmCalls ?? 0,
+        optimizationLatencyMs,
+        searchLatencyMs,
+      },
     });
   }
 
@@ -56,7 +83,27 @@ export async function runVariant(options: RunVariantOptions): Promise<VariantEva
       : 0;
   }
 
-  return { variant: options.name, averages, samples };
+  const recalls = samples
+    .map((s) => s.retrieval?.recallAtK)
+    .filter((v): v is number => v !== null && v !== undefined);
+  const mrr = samples
+    .map((s) => s.retrieval?.mrr)
+    .filter((v): v is number => v !== null && v !== undefined);
+  const llmCalls = samples.map((s) => s.retrieval?.llmCalls ?? 0);
+  const latencies = samples.map((s) => s.retrieval?.optimizationLatencyMs ?? 0);
+
+  return {
+    variant: options.name,
+    averages,
+    samples,
+    retrieval: {
+      meanRecallAtK: recalls.length ? recalls.reduce((a, b) => a + b, 0) / recalls.length : 0,
+      meanMrr: mrr.length ? mrr.reduce((a, b) => a + b, 0) / mrr.length : 0,
+      meanLlmCalls: llmCalls.length ? llmCalls.reduce((a, b) => a + b, 0) / llmCalls.length : 0,
+      meanOptimizationLatencyMs: latencies.length ? latencies.reduce((a, b) => a + b, 0) / latencies.length : 0,
+      emptyRate: samples.length ? samples.filter((s) => s.retrievedSources.length === 0).length / samples.length : 0,
+    },
+  };
 }
 
 export interface CompareOptions {

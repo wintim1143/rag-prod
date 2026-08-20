@@ -4,9 +4,9 @@
 
 **Blocked by:** 04 — 问答/聊天端点
 
-**Status:** ready-for-agent
+**Status:** done ✅ (2026-08-18)
 
-- [ ] `/chat` 通过 SSE 流式输出，客户端收到增量回答
-- [ ] agentic 模式：模型调用检索工具、自主生成检索 query；响应附工具调用 trace
-- [ ] 配置可在固定流水线 chat 与 agentic chat 间切换
-- [ ] 工具调用 trace + 引用溯源在演示对话上端到端可用
+- [x] `/chat` 通过 SSE 流式输出，客户端收到增量回答
+- [x] agentic 模式：模型调用检索工具、自主生成检索 query；响应附工具调用 trace
+- [x] 配置可在固定流水线 chat 与 agentic chat 间切换
+- [x] 工具调用 trace + 引用溯源在演示对话上端到端可用

@@ -10,16 +10,52 @@ import type { ChatMessage, ChatProvider } from './types.js';
 
 /** provider 需要的最底层 LLM 接口（生产用 ChatOpenAI 适配，测试注入假实现）。 */
 export interface ChatLlm {
-  invoke(messages: ChatMessage[]): Promise<{ content: string }>;
+  invoke(messages: ChatMessage[], signal?: AbortSignal): Promise<{ content: string }>;
+  stream?(messages: ChatMessage[], signal?: AbortSignal): AsyncIterable<unknown>;
 }
 
 /** OpenAI 兼容 chat provider：把角色化消息交给底层 LLM，返回文本 content。 */
 export class OpenAICompatibleChatProvider implements ChatProvider {
   constructor(private readonly llm: ChatLlm) {}
 
-  async generate(messages: ChatMessage[]): Promise<string> {
-    const result = await this.llm.invoke(messages);
+  async generate(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
+    const result = signal === undefined
+      ? await this.llm.invoke(messages)
+      : await this.llm.invoke(messages, signal);
     return result.content;
+  }
+
+  async chooseToolQuery(messages: ChatMessage[], signal?: AbortSignal): Promise<import('./types.js').ToolDecision> {
+    const result = await this.llm.invoke([
+      { role: 'system', content: '你是检索规划器。只输出 JSON：需要资料时 {"type":"search","query":"..."}，不需要时 {"type":"no_search"}。不要回答问题。' },
+      ...messages,
+    ], signal);
+    const raw = result.content.trim().replace(/^```json\s*|```$/g, '').trim();
+    try {
+      const parsed = JSON.parse(raw) as { type?: string; query?: unknown };
+      if (parsed.type === 'no_search') return { type: 'no_search' };
+      if (parsed.type === 'search' && typeof parsed.query === 'string' && parsed.query.trim()) {
+        return { type: 'search', query: parsed.query.trim().slice(0, 500) };
+      }
+    } catch {
+      // 兼容旧的纯文本 planner 输出。
+    }
+    if (raw.toUpperCase() === 'NO_SEARCH' || !raw) return { type: 'no_search' };
+    return { type: 'search', query: raw.slice(0, 500) };
+  }
+
+  stream(messages: ChatMessage[], signal?: AbortSignal): AsyncIterable<string> {
+    if (!this.llm.stream) {
+      throw new Error('当前 ChatProvider 不支持流式输出');
+    }
+    return mapTextStream(this.llm.stream(messages, signal));
+  }
+}
+
+export async function* mapTextStream(source: AsyncIterable<unknown>): AsyncIterable<string> {
+  for await (const chunk of source) {
+    const text = typeof chunk === 'string' ? chunk : contentToString(chunk);
+    if (text) yield text;
   }
 }
 
@@ -65,9 +101,13 @@ export function createChatProvider(config: Config): ChatProvider {
     maxRetries: 2,
   });
   const adapter: ChatLlm = {
-    async invoke(messages: ChatMessage[]) {
-      const result = await llm.invoke(toLangChainMessages(messages));
+    async invoke(messages: ChatMessage[], signal?: AbortSignal) {
+      const result = await llm.invoke(toLangChainMessages(messages), { signal });
       return { content: contentToString(result.content) };
+    },
+    async *stream(messages: ChatMessage[], signal?: AbortSignal): AsyncIterable<unknown> {
+      const stream = await llm.stream(toLangChainMessages(messages), { signal });
+      yield* stream;
     },
   };
   return new OpenAICompatibleChatProvider(adapter);

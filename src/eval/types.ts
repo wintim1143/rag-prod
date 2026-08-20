@@ -26,6 +26,26 @@ export interface MetricResult {
   explanation: string;
 }
 
+/** 单条样本的检索与成本统计（08 查询优化的成本/召回对比）。 */
+export interface RetrievalStats {
+  /** 命中期望源的数量（对 expectedSources 求交集）。 */
+  hits: number;
+  /** 期望源总数。 */
+  expected: number;
+  /** hit/expected（无期望源时为 null）。 */
+  recallAtK: number | null;
+  /** 首个期望源的最小 rank（1 起；未命中为 null）。 */
+  mrr: number | null;
+  /** 检索实际执行的 query 数（含多查询/HyDE 变体）。 */
+  queryCount: number;
+  /** 查询优化产生的 LLM 调用次数。 */
+  llmCalls: number;
+  /** 查询优化耗时（ms）。 */
+  optimizationLatencyMs: number;
+  /** 检索总耗时（ms，可空）。 */
+  searchLatencyMs: number | null;
+}
+
 /** 单条样本在某一配置下的全量判分结果。 */
 export interface SampleEval {
   sampleId: string;
@@ -33,6 +53,8 @@ export interface SampleEval {
   /** 检索到的来源块（供 trace）。 */
   retrievedSources: string[];
   results: MetricResult[];
+  /** 检索与成本统计（08 查询优化）。 */
+  retrieval?: RetrievalStats;
 }
 
 /** 某一配置变体跑完评测集的聚合结果。 */
@@ -43,6 +65,14 @@ export interface VariantEval {
   averages: Record<MetricName, number>;
   /** 每条样本的明细。 */
   samples: SampleEval[];
+  /** 检索与成本聚合（08 查询优化）。 */
+  retrieval?: {
+    meanRecallAtK: number;
+    meanMrr: number;
+    meanLlmCalls: number;
+    meanOptimizationLatencyMs: number;
+    emptyRate: number;
+  };
 }
 
 /** 回归判定：变体对基线某个指标跌破阈值。 */

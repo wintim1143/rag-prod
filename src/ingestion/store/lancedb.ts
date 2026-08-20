@@ -157,10 +157,12 @@ export class LanceDBStore {
   }
 
   /** 删除某 docId 的全部块；返回删除的块数。 */
-  async deleteDocument(docId: string): Promise<number> {
+  async deleteDocument(docId: string, filter: ChunkFilter = {}): Promise<number> {
     const table = await this.openOrNull();
     if (!table) return 0;
-    const result = await table.delete(`docId = '${docId}'`);
+    const where = this.buildWhere({ ...filter, docId });
+    if (!where) throw new Error('删除文档必须指定租户过滤条件');
+    const result = await table.delete(where);
     const deleted = typeof result === 'number' ? result : result.numDeletedRows ?? 0;
     await this.rebuildFtsIndex();
     return deleted;

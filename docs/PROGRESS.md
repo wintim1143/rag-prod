@@ -15,6 +15,8 @@
 | 05 知识库管理 API | done ✅ | 无 |
 | 06 评估体系（LLM 判分 + 回归） | done ✅ | **是 — 云 chat LLM 判分**（judge 用同一 chat provider） |
 | 07 检索诊断 | done ✅ | 无 |
+| 08 查询优化 | done ✅ (2026-08-18) | **是 — 改写/多查询/HyDE 可选调用 chat LLM** |
+| 09 Agentic + 流式聊天 | done ✅ (2026-08-18) | **是 — `/chat` SSE 使用 chat LLM；agentic 配置已预留** |
 
 ## 已完成工作
 

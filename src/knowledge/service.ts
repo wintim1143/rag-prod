@@ -21,10 +21,10 @@ export interface ReindexResult {
 export interface KnowledgeService {
   /** 列出全部文档（+块数+元数据）。 */
   listDocuments(filter?: ChunkFilter): Promise<DocumentMeta[]>;
-  /** 删除某文档全部块。 */
-  deleteDocument(docId: string): Promise<DeleteResult>;
+  /** 删除某文档全部块（限制在租户内）。 */
+  deleteDocument(docId: string, filter: ChunkFilter): Promise<DeleteResult>;
   /** 重索引：按 sourcePath 重新摄入（旧块被新块替换）。 */
-  reindexDocument(docId: string): Promise<ReindexResult>;
+  reindexDocument(docId: string, filter: ChunkFilter): Promise<ReindexResult>;
 }
 
 /**
@@ -43,14 +43,14 @@ export class KnowledgeServiceImpl implements KnowledgeService {
   }
 
   /** 删除某文档全部块。 */
-  async deleteDocument(docId: string): Promise<DeleteResult> {
-    const deleted = await this.deps.store.deleteDocument(docId);
+  async deleteDocument(docId: string, filter: ChunkFilter): Promise<DeleteResult> {
+    const deleted = await this.deps.store.deleteDocument(docId, filter);
     return { docId, deleted };
   }
 
   /** 重索引：按 sourcePath 重新摄入（旧块被新块替换）。 */
-  async reindexDocument(docId: string): Promise<ReindexResult> {
-    const docs = await this.deps.store.listDocuments({ docId });
+  async reindexDocument(docId: string, filter: ChunkFilter): Promise<ReindexResult> {
+    const docs = await this.deps.store.listDocuments({ ...filter, docId });
     const meta = docs[0];
     if (!meta) {
       throw new Error(`文档不存在: ${docId}`);

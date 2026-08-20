@@ -63,7 +63,7 @@ describe('KnowledgeService — 文档生命周期', () => {
     const { docId } = await ingestFile(file);
 
     const service = makeService({ ingestPath: vi.fn() });
-    const result = await service.deleteDocument(docId);
+    const result = await service.deleteDocument(docId, { tenant: 'default' });
     expect(result.deleted).toBeGreaterThan(0);
     const docs = await service.listDocuments();
     expect(docs.find((d) => d.docId === docId)).toBeUndefined();
@@ -83,13 +83,13 @@ describe('KnowledgeService — 文档生命周期', () => {
     };
     const service = makeService(ingest);
 
-    const result = await service.reindexDocument(docId);
+    const result = await service.reindexDocument(docId, { tenant: 'default' });
     expect(result).toEqual({ docId, chunkCount: 7 });
     expect(ingest.ingestPath).toHaveBeenCalledWith(file);
   });
 
   it('reindexDocument 对不存在的 docId 抛错', async () => {
     const service = makeService({ ingestPath: vi.fn() });
-    await expect(service.reindexDocument('no-such-doc')).rejects.toThrow('不存在');
+    await expect(service.reindexDocument('no-such-doc', { tenant: 'default' })).rejects.toThrow('不存在');
   });
 });

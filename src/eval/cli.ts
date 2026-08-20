@@ -8,6 +8,7 @@ import { LocalEmbedder } from '../ingestion/embedder.js';
 import { LanceDBStore } from '../ingestion/store/lancedb.js';
 import { LocalReranker } from '../retrieval/reranker.js';
 import { SearchPipeline } from '../retrieval/search.js';
+import { LlmQueryOptimizer } from '../retrieval/query-optimizer.js';
 import { EVAL_DATASET } from './dataset.js';
 import { compareVariants, runVariant } from './runner.js';
 
@@ -24,15 +25,26 @@ async function main() {
   const reranker = new LocalReranker(config.reranker.model);
   const judge = createChatProvider(config);
 
-  function makeSearch(k: number) {
-    const search = new SearchPipeline(config, { embedder, store, reranker });
-    return { search, answer: new AnswerPipeline(search, judge), k };
+  function makeSearch(k: number, opts?: { rewrite?: boolean; multiQuery?: boolean; hyde?: boolean }) {
+    const search = new SearchPipeline(config, {
+      embedder,
+      store,
+      reranker,
+      optimizer: new LlmQueryOptimizer(judge),
+    });
+    return {
+      search,
+      answer: new AnswerPipeline(search, judge),
+      k,
+      overrides: { rewrite: opts?.rewrite ?? false, multiQuery: opts?.multiQuery ?? false, hyde: opts?.hyde ?? false },
+    };
   }
 
   const variants = [
-    { name: `baseline-k${config.retrieval.k}`, k: config.retrieval.k },
-    { name: 'k1', k: 1 },
-    { name: 'k5', k: 5 },
+    { name: `baseline-k${config.retrieval.k}`, k: config.retrieval.k, opts: undefined },
+    { name: 'rewrite', k: config.retrieval.k, opts: { rewrite: true } },
+    { name: 'multi-query', k: config.retrieval.k, opts: { multiQuery: true } },
+    { name: 'hyde', k: config.retrieval.k, opts: { hyde: true } },
   ];
 
   // 评测集默认全量；用 EVAL_DATASET 子集（如环境变量 EVAL_MAX_SAMPLES 限制冒烟）

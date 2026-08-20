@@ -51,7 +51,7 @@ describe('知识库管理 API', () => {
     const res = await app.inject({ method: 'DELETE', url: '/documents/d1' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ docId: 'd1', deleted: 3 });
-    expect(knowledgeStub.deleteDocument).toHaveBeenCalledWith('d1');
+    expect(knowledgeStub.deleteDocument).toHaveBeenCalledWith('d1', { tenant: 'default' });
   });
 
   it('POST /documents/:docId/reindex 重索引并返回新块数', async () => {
@@ -59,7 +59,7 @@ describe('知识库管理 API', () => {
     const res = await app.inject({ method: 'POST', url: '/documents/d1/reindex' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ docId: 'd1', chunkCount: 5 });
-    expect(knowledgeStub.reindexDocument).toHaveBeenCalledWith('d1');
+    expect(knowledgeStub.reindexDocument).toHaveBeenCalledWith('d1', { tenant: 'default' });
   });
 
   it('reindex 不存在的 docId 返回 404', async () => {

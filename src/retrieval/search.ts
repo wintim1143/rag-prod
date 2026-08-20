@@ -3,20 +3,21 @@ import type { Embedder } from '../ingestion/embedder.js';
 import type { ChunkFilter, FtsHit, LanceDBStore, VectorHit } from '../ingestion/store/lancedb.js';
 import { classifyDiagnosis, queryTokens } from './classifier.js';
 import type { RerankResult, Reranker } from './reranker.js';
-import { rrfMerge } from './rrf.js';
+import { rrfMerge, rrfMergeMany, type RrfQueryResult } from './rrf.js';
+import type { QueryOptimizationOptions, QueryOptimizer } from './query-optimizer.js';
 import type { SearchCandidate, SearchResponse, TraceHit, TraceResponse } from './types.js';
 
 export interface SearchService {
   search(
     query: string,
-    options?: { n?: number; k?: number; filter?: ChunkFilter },
+    options?: { n?: number; k?: number; filter?: ChunkFilter; signal?: AbortSignal },
   ): Promise<SearchResponse>;
 }
 
 export interface TraceService {
   trace(
     query: string,
-    options?: { n?: number; k?: number; filter?: ChunkFilter; expected?: string[] },
+    options?: { n?: number; k?: number; filter?: ChunkFilter; expected?: string[]; signal?: AbortSignal },
   ): Promise<TraceResponse>;
 }
 
@@ -24,6 +25,7 @@ export interface SearchDeps {
   embedder: Embedder;
   store: LanceDBStore;
   reranker: Reranker;
+  optimizer?: QueryOptimizer;
 }
 
 /** 检索管线中间产物（search 与 trace 共享，避免两条实现漂移）。 */
@@ -36,6 +38,8 @@ interface PipelineStages {
   ftsHits: FtsHit[];
   merged: SearchCandidate[];
   reranked: RerankResult;
+  optimization?: Awaited<ReturnType<QueryOptimizer['optimize']>>;
+  queryResults?: RrfQueryResult[];
 }
 
 /**
@@ -51,7 +55,7 @@ export class SearchPipeline implements SearchService, TraceService {
 
   async search(
     query: string,
-    options: { n?: number; k?: number; filter?: ChunkFilter } = {},
+    options: { n?: number; k?: number; filter?: ChunkFilter; signal?: AbortSignal } = {},
   ): Promise<SearchResponse> {
     const stages = await this.runStages(query, options);
     const results = stages.reranked.candidates.slice(0, stages.k).map((c) => ({
@@ -77,7 +81,19 @@ export class SearchPipeline implements SearchService, TraceService {
         topK: stages.k,
         reranker: stages.reranked.status,
         fallbackReason: stages.reranked.reason,
+        optimizationLlmCalls: stages.optimization?.llmCalls,
+        optimizationLatencyMs: stages.optimization ? Math.round(stages.optimization.latencyMs) : undefined,
       },
+      optimization: stages.optimization
+        ? {
+            originalQuery: stages.optimization.originalQuery,
+            queries: stages.optimization.queries,
+            strategies: stages.optimization.strategies,
+            llmCalls: stages.optimization.llmCalls,
+            latencyMs: stages.optimization.latencyMs,
+            failures: stages.optimization.failures,
+          }
+        : undefined,
     };
   }
 
@@ -153,24 +169,52 @@ export class SearchPipeline implements SearchService, TraceService {
   /** 跑完整检索管线，返回中间产物；query 清洗与 n/k 解析在共享入口保证 search/trace 行为一致。 */
   private async runStages(
     query: string,
-    options: { n?: number; k?: number; filter?: ChunkFilter },
+    options: { n?: number; k?: number; filter?: ChunkFilter; signal?: AbortSignal },
   ): Promise<PipelineStages> {
     const n = options.n ?? this.config.retrieval.n;
     const k = options.k ?? this.config.retrieval.k;
+    if (!Number.isInteger(n) || !Number.isInteger(k) || n < 1 || k < 1 || k > n || n > 200 || k > 50) {
+      throw new Error('检索参数无效：要求 1 ≤ k ≤ n，且 n ≤ 200、k ≤ 50');
+    }
     const trimmed = query.trim();
     if (!trimmed) {
       throw new Error('query 不能为空');
     }
 
-    const queryVector = (await this.deps.embedder.embedTexts([trimmed]))[0] as number[];
-    const [vectorHits, ftsHits] = await Promise.all([
-      this.deps.store.vectorSearch(queryVector, n, options.filter),
-      this.deps.store.ftsSearch(trimmed, n, options.filter),
-    ]);
-
-    const merged = rrfMerge(vectorHits, ftsHits);
-    const reranked = await this.deps.reranker.rerank(trimmed, merged);
-    return { query: trimmed, n, k, queryVector, vectorHits, ftsHits, merged, reranked };
+    if (options.signal?.aborted) throw options.signal.reason;
+    const optimization = this.deps.optimizer
+      ? await this.deps.optimizer.optimize(
+          trimmed,
+          {
+            rewrite: this.config.queryOptimization.rewrite,
+            multiQuery: this.config.queryOptimization.multiQuery,
+            hyde: this.config.queryOptimization.hyde,
+          },
+          undefined,
+          options.signal,
+        )
+      : undefined;
+    const actualQueries = optimization?.queries.length
+      ? optimization.hypothetical && this.config.queryOptimization.hyde
+        ? [...optimization.queries, optimization.hypothetical]
+        : optimization.queries
+      : [trimmed];
+    const queryResults: RrfQueryResult[] = [];
+    let queryVector: number[] = [];
+    for (const [queryIndex, actualQuery] of actualQueries.slice(0, 4).entries()) {
+      if (options.signal?.aborted) throw options.signal.reason;
+      const vector = (await this.deps.embedder.embedTexts([actualQuery]))[0] as number[];
+      if (queryIndex === 0) queryVector = vector;
+      const vectors = await this.deps.store.vectorSearch(vector, n, options.filter);
+      const fts = optimization?.hypothetical === actualQuery
+        ? []
+        : await this.deps.store.ftsSearch(actualQuery, n, options.filter);
+      queryResults.push({ query: actualQuery, queryIndex, vectorHits: vectors, ftsHits: fts });
+    }
+    const first = queryResults[0] ?? { query: trimmed, queryIndex: 0, vectorHits: [], ftsHits: [] };
+    const merged = rrfMergeMany(queryResults);
+    const reranked = await this.deps.reranker.rerank(trimmed, merged.slice(0, n));
+    return { query: trimmed, n, k, queryVector, vectorHits: first.vectorHits, ftsHits: first.ftsHits, merged, reranked, optimization, queryResults };
   }
 }
 

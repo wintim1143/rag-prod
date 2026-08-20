@@ -61,6 +61,9 @@ npm run typecheck             # tsc --noEmit
 | `RETRIEVAL_N` / `RETRIEVAL_K` | 粗筛候选数 / 精排后 top-k | `50` / `5` |
 | `HYBRID` | 混合检索（向量 + BM25 + RRF）固定开启 | `true` |
 | `QUERY_REWRITE` / `MULTI_QUERY` / `HYDE` | 查询优化开关（08） | `false` |
+| `CHAT_MODE` | 聊天模式：`fixed` / `agentic` | `fixed` |
+| `CHAT_STREAM` | `/chat` 是否以 SSE 流式返回 | `true` |
+| `AGENT_MAX_STEPS` / `AGENT_TIMEOUT_MS` | Agent 资源限制 | `3` / `30000` |
 | `EVAL_MAX_SAMPLES` | 评估最多跑多少条样本（`npm run eval`，冒烟用） | 全量 |
 
 ## 规划目录结构
@@ -93,7 +96,7 @@ rag-prod/
 - `POST /search` — 混合检索 + 本地重排（**03 已实现**）；body `{ query, n?, k? }`，返回排序块与各环节分数（向量/BM25/RRF/重排）
 - `POST /search` — 混合检索 + 重排（各环节分数可见）
 - `POST /ask` — 单轮问答（**04 已实现**）；body `{ query, k? }`，返回带 `[编号]` 引用的回答与来源块
-- `POST /chat` — 多轮对话（**04 已实现**）；body `{ messages: [{role, content}…], k? }`，短追问自动改写检索 query
+- `POST /chat` — 多轮对话（**04/09**）；`CHAT_STREAM=true` 时以 SSE 发送 `text_delta`、`sources`、`done` 或 `error` 事件；关闭时保留 JSON 兼容响应
 - `GET /documents` — 文档列表（**05 已实现**）：全部文档 + 块数 + 元数据
 - `DELETE /documents/:id` — 删除文档全部块（**05 已实现**）
 - `POST /documents/:id/reindex` — 按源路径重索引（**05 已实现**）
